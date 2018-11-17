@@ -1,0 +1,126 @@
+package UnitsApi
+
+import Abilities
+import Icons
+import Units
+import UnitObjEditing
+
+public constant LEVEL_0 = 'wv00'
+public constant LEVEL_1 = 'wv01'
+public constant LEVEL_2 = 'wv02'
+public constant LEVEL_3 = 'wv03'
+public constant LEVEL_4 = 'wv04'
+public constant LEVEL_5 = 'wv05'
+public constant LEVEL_6 = 'wv06'
+public constant LEVEL_7 = 'wv07'
+public constant LEVEL_8 = 'wv08'
+public constant LEVEL_9 = 'wv09'
+
+public constant ID_DEFENDER_0 = 'df00'
+public constant ID_DEFENDER_1 = 'df01'
+public constant ID_DEFENDER_2 = 'df02'
+public constant ID_DEFENDER_3 = 'df03'
+
+public constant ID_BARRACKS = 'raxx'
+
+public function ship_name(int round) returns string
+    switch round
+        case 0
+            return "Dingy"
+        case 1
+            return "Sailor"
+        case 2
+            return "Interceptor"
+        case 3
+            return "Crusader"
+        case 4
+            return "Sea Punisher"
+        case 5
+            return "Destroyer"
+        case 6
+            return "Dominator"
+        case 7
+            return "Juggernaught"
+        case 8
+            return "Overlord"
+        case 9
+            return "Ghost ship"
+        default
+            return "??"
+
+class BaseShip extends UnitDefinition
+    construct(int id, real scale, int ss, int hp, int bounty, string name, string model)
+        super(id, 'hbot')
+        setScalingValue(scale)
+        setSpeedBase(ss)
+        setModelFile(model)
+        setHitPointsMaximumBase(hp)
+        setName(name)
+        setGoldBountyAwardedBase(bounty - 1)
+        setGoldBountyAwardedNumberofDice(1)
+        setGoldBountyAwardedSidesperDie(1)
+        setCollisionSize(15.)  // 1 too small?  2 too small?  4 too small?  7 too small?
+        setAttacksEnabled(1)
+        setAttack1Range(250)
+        setAttack1ProjectileArt(Abilities.cannonTowerMissile)
+        setAttack1ProjectileSpeed(800)
+        setAttack1DamageBase(499)
+        setAttack1DamageNumberofDice(1)
+        setAttack1DamageSidesperDie(1)
+        setSelectionScale(2.)
+
+@compiletime function createShips()
+    new BaseShip(LEVEL_0, 0.5, 140, 100, 5, ship_name(0), Units.orcishTransportShip)
+    new BaseShip(LEVEL_1, 0.5, 145, 110, 6, ship_name(1), Units.humanTransportShip1)
+    new BaseShip(LEVEL_2, 0.5, 150, 121, 7, ship_name(2), Units.humanDestroyerShip1)
+    new BaseShip(LEVEL_3, 0.5, 155, 133, 8, ship_name(3), Units.nightElfFishingBoat)
+    new BaseShip(LEVEL_4, 0.5, 160, 146, 9, ship_name(4), Units.orcishDestroyerShip1)
+    new BaseShip(LEVEL_5, 0.5, 165, 161, 10, ship_name(5), Units.undeadDestroyerShip1)
+    new BaseShip(LEVEL_6, 0.5, 170, 177, 11, ship_name(6), Units.nightElfBattleship)
+    new BaseShip(LEVEL_7, 0.5, 175, 195, 12, ship_name(7), Units.orcJuggernaught)
+    new BaseShip(LEVEL_8, 0.5, 180, 215, 13, ship_name(8), Units.undeadShipBattleShip)
+    new BaseShip(LEVEL_9, 0.9, 185, 237, 14, ship_name(9), Units.undeadTransportShip1)
+
+
+class BaseDefender extends UnitDefinition
+    construct(int id, int baseDamage, int range, int cost, string name, string model, string icon)
+        super(id, 'nhea')
+        setButtonPositionX(0)
+        setButtonPositionY(0)
+        setAttack1DamageBase(baseDamage)
+        setAttack1Range(range)
+        setModelFile(model)
+        setGoldCost(cost)
+        setStockMaximum(1)
+        setStockReplenishInterval(0)
+        setStockStartDelay(0)
+        setBuildTime(1)
+        setAcquisitionRange(range.toReal())
+        setLumberCost(0)
+        setFoodCost(0)
+        setName(name)
+        setTooltipBasic("Train " + name)
+        setTooltipExtended(
+            "A ranged, mobile defender which can hold position and form a blockade.|n |n" +
+            "|cffffcc00Nominal damage:|r " + (baseDamage + 1).toString()
+        )
+        setIconGameInterface(icon)
+        setCollisionSize(32.) // 31 too small.
+        setAttack1CooldownTime(1.25)
+        setSelectionScale(1.5)
+
+@compiletime function createDefenders()
+    new BaseDefender(ID_DEFENDER_0,  10, 500,  50, "Elven Archer", Units.highElfArcher1, Icons.bTNHighElvenArcher)
+    new BaseDefender(ID_DEFENDER_1,  25, 510, 100, "Elven Ranger", Units.archer, Icons.bTNArcher)
+    new BaseDefender(ID_DEFENDER_2,  55, 520, 200, "Dwarven Rifleman", Units.rifleman1, Icons.bTNRifleman)
+    new BaseDefender(ID_DEFENDER_3, 115, 530, 400, "Space Marine", Units.marine, Icons.bTNMarine)
+
+class Barracks extends BuildingDefinition
+    construct(int id)
+        super(id, 'hbar')
+        setUnitsTrained("df00,df01,df02,df03")
+        setResearchesAvailable("")
+        setPlacementRequires("")
+
+@compiletime function createBarracks()
+    new Barracks(ID_BARRACKS)
