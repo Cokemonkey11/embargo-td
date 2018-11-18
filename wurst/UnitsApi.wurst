@@ -102,19 +102,19 @@ public function wave_count() returns int
         let props = SHIP_PROPS.get(i)
         new BaseShip(
             props.id,
-            0.5,
+            props.scale_size,
             140 + 5 * i,
-            2 * (100. * 1.2.pow(i.toReal())).toInt(),
-            5 + i,
+            2 * (90. * 1.15.pow(i.toReal())).toInt(),
+            7 + i,
             props.name,
             props.model,
             props.armor_type,
-            i
+            1 + (i / 5.).toInt()
         )
 
 
 class BaseDefender extends UnitDefinition
-    function setup(int baseDamage, int range, int cost, string name, WeaponType wt, string projectileArt, string model, string icon)
+    function setup(int baseDamage, int range, int cost, string name, string sound_set, WeaponType wt, string projectileArt, string model, string icon)
         setButtonPositionX(0)
         setButtonPositionY(0)
         setAttack1DamageBase(baseDamage)
@@ -140,18 +140,19 @@ class BaseDefender extends UnitDefinition
         setAttack1CooldownTime(1.25)
         setSelectionScale(1.5)
         setAttack1WeaponType(wt)
+        setUnitSoundSet(sound_set)
         setAttack1ProjectileArt(projectileArt)
 
-    construct(int id, int baseDamage, int range, int cost, string name, WeaponType wt, string projectileArt, string model, string icon)
+    construct(int id, int baseDamage, int range, int cost, string name, string sound_set, WeaponType wt, string projectileArt, string model, string icon)
         super(id, 'nhea')
-        setup(baseDamage, range, cost, name, wt, projectileArt, model, icon)
+        setup(baseDamage, range, cost, name, sound_set, wt, projectileArt, model, icon)
 
-    construct(int id, int baseDamage, int range, int cost, string name, string model, string icon)
+    construct(int id, int baseDamage, int range, int cost, string name, string sound_set, string model, string icon)
         super(id, 'nhea')
-        setup(baseDamage, range, cost, name, WeaponType.Missile, Abilities.arrowMissile1, model, icon)
+        setup(baseDamage, range, cost, name, sound_set, WeaponType.Missile, Abilities.arrowMissile1, model, icon)
 
 class BaseMeleeDefender extends UnitDefinition
-    construct(int id, int baseDamage, int cost, string name, string model, string icon)
+    construct(int id, int baseDamage, int cost, string name, string sound_set, string model, string icon)
         super(id, 'hfoo')
         setButtonPositionX(0)
         setButtonPositionY(1)
@@ -164,6 +165,7 @@ class BaseMeleeDefender extends UnitDefinition
         setStockReplenishInterval(0)
         setStockStartDelay(0)
         setBuildTime(1)
+        setUnitSoundSet(sound_set)
         setAcquisitionRange(100)
         setLumberCost(0)
         setFoodCost(1)
@@ -180,8 +182,8 @@ class BaseMeleeDefender extends UnitDefinition
         setSelectionScale(1.5)
 
 class DoNothingDefender extends BaseMeleeDefender
-    construct(int id, int cost, string name, string model, string icon)
-        super(id, 0, cost, name, model, icon)
+    construct(int id, int cost, string name, string sound_set, string model, string icon)
+        super(id, 0, cost, name, sound_set, model, icon)
         setAttacksEnabled(0)
         setTooltipExtended(
             "A mobile defender which can hold position and form a blockade.|n |n" +
@@ -189,17 +191,17 @@ class DoNothingDefender extends BaseMeleeDefender
         )
 
 @compiletime function createDefenders()
-    new BaseDefender(ID_DEFENDER_0,  10, 400,  50, "Elven Archer", Units.highElfArcher1, Icons.bTNHighElvenArcher)
-    new BaseDefender(ID_DEFENDER_1,  25, 410, 100, "Elven Ranger", Units.archer, Icons.bTNArcher)
-    new BaseDefender(ID_DEFENDER_2,  55, 420, 200, "Dwarven Rifleman", WeaponType.Instant, Abilities.rifleImpact, Units.rifleman1, Icons.bTNRifleman)
-    new BaseDefender(ID_DEFENDER_3, 115, 430, 400, "Space Marine", WeaponType.Instant, Abilities.rifleImpact, Units.marine, Icons.bTNMarine)
+    new BaseDefender(ID_DEFENDER_0,  10, 400,  50, "Elven Archer", "Archer", Units.highElfArcher1, Icons.bTNHighElvenArcher)
+    new BaseDefender(ID_DEFENDER_1,  25, 410, 100, "Elven Ranger", "Archer", Units.archer, Icons.bTNArcher)
+    new BaseDefender(ID_DEFENDER_2,  55, 420, 200, "Dwarven Rifleman", "Rifleman", WeaponType.Instant, Abilities.rifleImpact, Units.rifleman1, Icons.bTNRifleman)
+    new BaseDefender(ID_DEFENDER_3, 115, 430, 400, "Space Marine", "TerranMarine", WeaponType.Instant, Abilities.rifleImpact, Units.marine, Icons.bTNMarine)
 
-    new BaseMeleeDefender(ID_MELEE_DEF_0,  15,  50, "Human Footman", Units.footman1, Icons.bTNFootman)
-    new BaseMeleeDefender(ID_MELEE_DEF_1,  35, 100, "Elven Swordsman", Units.theCaptain1, Icons.bTNTheCaptain)
-    new BaseMeleeDefender(ID_MELEE_DEF_2,  75, 200, "Elven Warden", Units.assassin1, Icons.bTNAssassin)
-    new BaseMeleeDefender(ID_MELEE_DEF_3, 155, 400, "Human Cavalry", Units.banditLord1, Icons.bTNBanditLord)
+    new BaseMeleeDefender(ID_MELEE_DEF_0,  15,  50, "Human Footman", "Footman", Units.footman1, Icons.bTNFootman)
+    new BaseMeleeDefender(ID_MELEE_DEF_1,  35, 100, "Elven Swordsman", "HighElfSwordsman", Units.theCaptain1, Icons.bTNTheCaptain)
+    new BaseMeleeDefender(ID_MELEE_DEF_2,  75, 200, "Elven Warden", "Assassin", Units.assassin1, Icons.bTNAssassin)
+    new BaseMeleeDefender(ID_MELEE_DEF_3, 155, 400, "Human Cavalry", "Bandit", Units.banditLord1, Icons.bTNBanditLord)
 
-    new DoNothingDefender(ID_DONOTHING_DEF, 10, "Human Villager", Units.villagerWoman1, Icons.bTNVillagerWoman)
+    new DoNothingDefender(ID_DONOTHING_DEF, 10, "Human Villager", "VillagerWoman", Units.villagerWoman1, Icons.bTNVillagerWoman)
 
 class Barracks extends BuildingDefinition
     construct(int id)

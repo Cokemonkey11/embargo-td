@@ -3,7 +3,7 @@ projectName: "embargo_td"
 dependencies:
 - "https://github.com/wurstscript/wurstStdlib2"
 buildMapData:
-  name: "Embargo TD 0.0.0"
-  fileName: "(8)embargo.td.0.0.0.w3x"
+  name: "Embargo TD 0.0.1"
+  fileName: "(8)embargo.td.0.0.1"
   author: "Cokemonkey11"
   playerCount: 8

@@ -11,309 +11,383 @@ import LinkedList
 import UnitsApi
 import Buildings
 
-constant SETUP_TIME = 15.
+constant SETUP_TIME = 20.  // 15 seemed too low?
+constant WAVE_DURATION = 50.  // 40 seemed too low?  45 too.
 constant STARTING_GOLD = 300
 constant WAYPOINT_NOMINAL_RADIUS = 75.
 constant LOCAL_FLOAT_LOCALITY = 256. + 128.
 constant INNER_FLOAT_LOCALITY = 64. + 32.
-constant SPAWN_INTERVAL = 2. // Spawn during round after this period.
+constant SPAWN_INTERVAL = 1.75 // Spawn during round after this period.  2 seemed too high?
 constant BUILDING_ANGLE = angle(3. * PI / 2.)
 constant SPAWN_POINT_PATHING_WIDTH = 128.
+constant LIVES = 30
+
+var game_over = false
 
 class Waypoints
-	vec2 mid
-	vec2 fin
-	bool mid_visited
+    vec2 mid
+    vec2 fin
+    bool mid_visited
 
-	construct(vec2 mid, vec2 fin)
-		this.mid = mid
-		this.fin = fin
-		this.mid_visited = false
+    construct(vec2 mid, vec2 fin)
+        this.mid = mid
+        this.fin = fin
+        this.mid_visited = false
 
 
 let creep_track = new HashMap<unit, Waypoints>()
 
 enum CreepRoundErr
-	NONE
-	NO_SUCH_ROUND
+    NONE
+    NO_SUCH_ROUND
 
 tuple round_result(int val, CreepRoundErr err)
 
 function creep_from_round(int whichRound) returns round_result
-	let props = SHIP_PROPS.get(whichRound)
-	if props == null
-		return round_result(0, CreepRoundErr.NO_SUCH_ROUND)
+    let props = SHIP_PROPS.get(whichRound)
+    if props == null
+        return round_result(0, CreepRoundErr.NO_SUCH_ROUND)
 
-	return round_result(props.id, CreepRoundErr.NONE)
+    return round_result(props.id, CreepRoundErr.NONE)
 
 function rax_id() returns int
-	return ID_BARRACKS
+    return ID_BARRACKS
 
 
 function player.spawn_round(int whichRound, vec2 start, vec2 mid, vec2 fin, bool have_partner)
-	let creep_id_res = creep_from_round(whichRound)
-	if creep_id_res.err != CreepRoundErr.NONE
-		return
+    let creep_id_res = creep_from_round(whichRound)
+    if creep_id_res.err != CreepRoundErr.NONE
+        return
 
-	let u = createUnit(this, creep_id_res.val, start, angle(0.))
-	if not have_partner
-		u.setHP(u.getHP() / 2.)
+    let u = createUnit(this, creep_id_res.val, start, angle(0.))
+    if not have_partner
+        u.setHP(u.getHP() / 2.)
 
-	creep_track.put(u, new Waypoints(mid, fin))
-	u.issuePointOrder("smart", mid)
+    creep_track.put(u, new Waypoints(mid, fin))
+    u.issuePointOrder("smart", mid)
 
 
 function vec2.grow_to_rect(real nominal_radius) returns rect
-	return Rect(this.x - nominal_radius, this.y - nominal_radius, this.x + nominal_radius, this.y + nominal_radius)
+    return Rect(this.x - nominal_radius, this.y - nominal_radius, this.x + nominal_radius, this.y + nominal_radius)
 
 
 enum FindLocalFloatErr
-	NONE
-	NO_LOCAL_FLOAT
+    NONE
+    NO_LOCAL_FLOAT
 
 tuple local_float_result(vec2 res, FindLocalFloatErr err)
 
 function vec2.is_shallow_water() returns bool
-	return (
-		not IsTerrainPathable(this.x, this.y, PATHING_TYPE_FLOATABILITY) and
-		not IsTerrainPathable(this.x, this.y, PATHING_TYPE_WALKABILITY)
-	)
+    return (
+        not IsTerrainPathable(this.x, this.y, PATHING_TYPE_FLOATABILITY) and
+        not IsTerrainPathable(this.x, this.y, PATHING_TYPE_WALKABILITY)
+    )
 
 function vec2.find_local_float() returns local_float_result
-	for i = 0 to 7
+    for i = 0 to 7
 
-		// The point is suitable if its surrounding areas are all floatable.
-		let maybePoint = this.polarOffset(angle(2. * PI / 8 * i), LOCAL_FLOAT_LOCALITY)
-		if maybePoint.is_shallow_water()
-			var ander = true
-			for j = 0 to 7
-				let fillerPoint = maybePoint.polarOffset(angle(2. * PI / 8 * j), INNER_FLOAT_LOCALITY)
-				ander = ander and fillerPoint.is_shallow_water()
+        // The point is suitable if its surrounding areas are all floatable.
+        let maybePoint = this.polarOffset(angle(2. * PI / 8 * i), LOCAL_FLOAT_LOCALITY)
+        if maybePoint.is_shallow_water()
+            var ander = true
+            for j = 0 to 7
+                let fillerPoint = maybePoint.polarOffset(angle(2. * PI / 8 * j), INNER_FLOAT_LOCALITY)
+                ander = ander and fillerPoint.is_shallow_water()
 
-			if ander
-				return local_float_result(maybePoint, FindLocalFloatErr.NONE)
-	return local_float_result(vec2(0., 0.), FindLocalFloatErr.NO_LOCAL_FLOAT)
+            if ander
+                return local_float_result(maybePoint, FindLocalFloatErr.NONE)
+    return local_float_result(vec2(0., 0.), FindLocalFloatErr.NO_LOCAL_FLOAT)
 
 
 function vec2.remove_walkability()
-	SetTerrainPathable(this.x, this.y, PATHING_TYPE_WALKABILITY, false)
+    SetTerrainPathable(this.x, this.y, PATHING_TYPE_WALKABILITY, false)
 
 class Team
-	player a
-	player b
-	player creep
-	vec2 a_start
-	vec2 b_start
-	vec2 mid
+    player a
+    player b
+    player creep
+    vec2 a_start
+    vec2 b_start
+    vec2 mid
 
-	int lives
+    int lives
 
-	vec2 a_waypoint
-	vec2 b_waypoint
-	vec2 mid_waypoint
+    vec2 a_waypoint
+    vec2 b_waypoint
+    vec2 mid_waypoint
 
-	effect spawn_point_a
-	effect spawn_point_b
-	effect midpoint_fx
+    effect spawn_point_a
+    effect spawn_point_b
+    effect midpoint_fx
 
-	construct(player a, player b, player creep)
-		this.a = a
-		this.b = b
-		this.creep = creep
-		this.a_start = a.getStartLocation()
-		this.b_start = b.getStartLocation()
-		this.mid = creep.getStartLocation()
+    construct(player a, player b, player creep)
+        this.a = a
+        this.b = b
+        this.creep = creep
+        this.a_start = a.getStartLocation()
+        this.b_start = b.getStartLocation()
+        this.mid = creep.getStartLocation()
 
-		this.lives = 20
+        this.lives = a.isIngame() or b.isIngame() ? LIVES : 0
 
-		let a_local_float_res = this.a_start.find_local_float()
-		let b_local_float_res = this.b_start.find_local_float()
-		let mid_local_float_res = this.mid.find_local_float()
+        let a_local_float_res = this.a_start.find_local_float()
+        let b_local_float_res = this.b_start.find_local_float()
+        let mid_local_float_res = this.mid.find_local_float()
 
-		this.a_waypoint = a_local_float_res.res
-		this.b_waypoint = b_local_float_res.res
-		this.mid_waypoint = mid_local_float_res.res
+        this.a_waypoint = a_local_float_res.res
+        this.b_waypoint = b_local_float_res.res
+        this.mid_waypoint = mid_local_float_res.res
 
-		this.spawn_point_a = addEffect(Abilities.massTeleportTo, this.a_waypoint)
-		this.spawn_point_b = addEffect(Abilities.massTeleportTo, this.b_waypoint)
-		this.midpoint_fx = addEffect(Buildings.circleOfPower1, this.mid_waypoint)
-			..setColor(155, 155, 155)
-			..setColorByPlayer(Player(PLAYER_NEUTRAL_PASSIVE))
+        this.spawn_point_a = addEffect(Abilities.massTeleportTo, this.a_waypoint)
+        this.spawn_point_b = addEffect(Abilities.massTeleportTo, this.b_waypoint)
+        this.midpoint_fx = addEffect(Buildings.circleOfPower1, this.mid_waypoint)
+            ..setColor(155, 155, 155)
+            ..setColorByPlayer(Player(PLAYER_NEUTRAL_PASSIVE))
 
-		if (
-			a_local_float_res.err != FindLocalFloatErr.NONE or
-			b_local_float_res.err != FindLocalFloatErr.NONE or
-			mid_local_float_res.err != FindLocalFloatErr.NONE
-		)
-			print("Bad local float result! " + a.getId().toString() + " " + a.getNameColored())
+        if (
+            a_local_float_res.err != FindLocalFloatErr.NONE or
+            b_local_float_res.err != FindLocalFloatErr.NONE or
+            mid_local_float_res.err != FindLocalFloatErr.NONE
+        )
+            print("Bad local float result! " + a.getId().toString() + " " + a.getNameColored())
 
-		// Remove walkability from waypoints and spawn points.
-		nullTimer() ->
-			let count = (SPAWN_POINT_PATHING_WIDTH / 16.).toInt()
-			for i = 0 to count
-				for j = 0 to count
-					(this.a_waypoint -
-						vec2(16. * count / 2., 16 * count / 2.) +
-						vec2(16. * i, 16. * j)).remove_walkability()
-		nullTimer() ->
-			let count = (SPAWN_POINT_PATHING_WIDTH / 16.).toInt()
-			for i = 0 to count
-				for j = 0 to count
-					(this.b_waypoint -
-						vec2(16. * count / 2., 16 * count / 2.) +
-						vec2(16. * i, 16. * j)).remove_walkability()
-		nullTimer() ->
-			let count = (SPAWN_POINT_PATHING_WIDTH / 16.).toInt()
-			for i = 0 to count
-				for j = 0 to count
-					(this.mid_waypoint -
-						vec2(16. * count / 2., 16 * count / 2.) +
-						vec2(16. * i, 16. * j)).remove_walkability()
+        // Remove walkability from waypoints and spawn points.
+        nullTimer() ->
+            let count = (SPAWN_POINT_PATHING_WIDTH / 16.).toInt()
+            for i = 0 to count
+                for j = 0 to count
+                    (this.a_waypoint -
+                        vec2(16. * count / 2., 16 * count / 2.) +
+                        vec2(16. * i, 16. * j)).remove_walkability()
+        nullTimer() ->
+            let count = (SPAWN_POINT_PATHING_WIDTH / 16.).toInt()
+            for i = 0 to count
+                for j = 0 to count
+                    (this.b_waypoint -
+                        vec2(16. * count / 2., 16 * count / 2.) +
+                        vec2(16. * i, 16. * j)).remove_walkability()
+        nullTimer() ->
+            let count = (SPAWN_POINT_PATHING_WIDTH / 16.).toInt()
+            for i = 0 to count
+                for j = 0 to count
+                    (this.mid_waypoint -
+                        vec2(16. * count / 2., 16 * count / 2.) +
+                        vec2(16. * i, 16. * j)).remove_walkability()
 
-	ondestroy
-		this.spawn_point_a.destr()
-		this.spawn_point_b.destr()
-		this.midpoint_fx.destr()
 
-	// Spawn a whole wave.
-	function do_round_spawn(int whichRound)
-		doPeriodicallyCounted(SPAWN_INTERVAL, 10) cb ->
-			if this.lives > 0
-				if this.a.isIngame()
-					this.creep.spawn_round(whichRound, this.a_waypoint, this.mid_waypoint, this.b_waypoint, this.b.isIngame())
-				if this.b.isIngame()
-					this.creep.spawn_round(whichRound, this.b_waypoint, this.mid_waypoint, this.a_waypoint, this.a.isIngame())
+    function get_other_player(player pl) returns player
+        if pl == this.a
+            return this.b
+        return this.a
+
+
+    ondestroy
+        this.spawn_point_a.destr()
+        this.spawn_point_b.destr()
+        this.midpoint_fx.destr()
+
+    // Spawn a whole wave.
+    function do_round_spawn(int whichRound)
+        doPeriodicallyCounted(SPAWN_INTERVAL, 10) cb ->
+            if this.lives > 0
+                if this.a.isIngame()
+                    this.creep.spawn_round(whichRound, this.a_waypoint, this.mid_waypoint, this.b_waypoint, this.b.isIngame())
+                if this.b.isIngame()
+                    this.creep.spawn_round(whichRound, this.b_waypoint, this.mid_waypoint, this.a_waypoint, this.a.isIngame())
 
 
 function round_from_cb_count(int cb_count) returns int
-	return (wave_count() + 1 - cb_count)
+    return (wave_count() + 1 - cb_count)
 
 let teams = new LinkedList<Team>()..add(
-	new Team(Player(0), Player(1), Player(8)),
-	new Team(Player(2), Player(3), Player(9)),
-	new Team(Player(4), Player(5), Player(10)),
-	new Team(Player(6), Player(7), Player(11))
+    new Team(Player(0), Player(1), Player(8)),
+    new Team(Player(2), Player(3), Player(9)),
+    new Team(Player(4), Player(5), Player(10)),
+    new Team(Player(6), Player(7), Player(11))
 )
 
 function get_team_from_creep(unit u) returns Team
-	let owner = u.getOwner()
-	return teams.filter((team) -> team.creep == owner).get(0)
+    let owner = u.getOwner()
+    return teams.filter((team) -> team.creep == owner).get(0)
+
+
+function get_team_from_player(player p) returns Team
+    return teams.filter((team) -> team.a == p or team.b == p).get(0)
+
+
+function all_teams_lost() returns bool
+    return teams.filter((team) -> team.lives > 0).size() == 0
+
+
+abstract class PlayerLeavesCallback
+    protected abstract function call(player which)
+
+PlayerLeavesCallback _playerLeavesCallback
+function playerLeaves(PlayerLeavesCallback cb)
+    _playerLeavesCallback = cb
+    let t = CreateTrigger()..addAction() ->
+        _playerLeavesCallback.call(GetTriggerPlayer())
+    for i = 0 to 23
+        t.registerPlayerEvent(Player(i), EVENT_PLAYER_LEAVE)
 
 init
-	// Setup next-waypoint.
-	let midpoint_trig = CreateTrigger()
-	teams.forEach() team ->
-		midpoint_trig.registerRectEnterEventSource(
-			team.mid_waypoint.grow_to_rect(WAYPOINT_NOMINAL_RADIUS)
-		)
-	midpoint_trig.addAction() ->
-		if creep_track.has(GetTriggerUnit())
-			let waypoints = creep_track.get(GetTriggerUnit())
-			waypoints.mid_visited = true
+    // Setup next-waypoint.
+    let midpoint_trig = CreateTrigger()
+    teams.forEach() team ->
+        midpoint_trig.registerRectEnterEventSource(
+            team.mid_waypoint.grow_to_rect(WAYPOINT_NOMINAL_RADIUS)
+        )
+    midpoint_trig.addAction() ->
+        if creep_track.has(GetTriggerUnit())
+            let waypoints = creep_track.get(GetTriggerUnit())
+            waypoints.mid_visited = true
 
-			GetTriggerUnit().issuePointOrder("smart", waypoints.fin)
+            GetTriggerUnit().issuePointOrder("smart", waypoints.fin)
 
-	// Setup barracks.
-	teams.forEach() team ->
-		if team.a.isIngame()
-			createUnit(team.a, rax_id(), team.a_start, BUILDING_ANGLE)
-			createUnit(team.a, rax_id(), team.mid - vec2(256., 0.), BUILDING_ANGLE)
+    // Setup barracks.
+    teams.forEach() team ->
+        if team.a.isIngame()
+            createUnit(team.a, rax_id(), team.a_start, BUILDING_ANGLE)
+            createUnit(team.a, rax_id(), team.mid - vec2(256., 0.), BUILDING_ANGLE)
 
-		if team.b.isIngame()
-			createUnit(team.b, rax_id(), team.b_start, BUILDING_ANGLE)
-			createUnit(team.b, rax_id(), team.mid + vec2(256., 0.), BUILDING_ANGLE)
+        if team.b.isIngame()
+            createUnit(team.b, rax_id(), team.b_start, BUILDING_ANGLE)
+            createUnit(team.b, rax_id(), team.mid + vec2(256., 0.), BUILDING_ANGLE)
 
-	// Setup starting gold.
-	teams.forEach() team ->
-		if team.a.isIngame()
-			team.a.setGold(STARTING_GOLD)
-		if team.b.isIngame()
-			team.b.setGold(STARTING_GOLD)
+    // Setup starting gold.
+    teams.forEach() team ->
+        if team.a.isIngame()
+            team.a.setGold(STARTING_GOLD)
+        if team.b.isIngame()
+            team.b.setGold(STARTING_GOLD)
 
-	// Setup bounty.
-	teams.forEach() team ->
-		team.creep.setState(PLAYER_STATE_GIVES_BOUNTY, 1)
+    // Setup bounty.
+    teams.forEach() team ->
+        team.creep.setState(PLAYER_STATE_GIVES_BOUNTY, 1)
 
-		// This creep will attack its embargo team if blocked.
-		team.creep.setPlayerAlliance(team.a, ALLIANCE_PASSIVE, false)
-		team.creep.setPlayerAlliance(team.b, ALLIANCE_PASSIVE, false)
+        // This creep will attack its embargo team if blocked.
+        team.creep.setPlayerAlliance(team.a, ALLIANCE_PASSIVE, false)
+        team.creep.setPlayerAlliance(team.b, ALLIANCE_PASSIVE, false)
 
-		// Others are allied to this creep.
-		teams.forEach() otherTeam ->
-			if otherTeam.creep != team.creep
-				otherTeam.a.setPlayerAlliance(team.creep, ALLIANCE_PASSIVE, true)
-				otherTeam.b.setPlayerAlliance(team.creep, ALLIANCE_PASSIVE, true)
+        // Others are allied to this creep.
+        teams.forEach() otherTeam ->
+            if otherTeam.creep != team.creep
+                otherTeam.a.setPlayerAlliance(team.creep, ALLIANCE_PASSIVE, true)
+                otherTeam.b.setPlayerAlliance(team.creep, ALLIANCE_PASSIVE, true)
 
-	// Misc setup.
-	FogEnable(false)
-	FogMaskEnable(false)
+    // Misc setup.
+    FogEnable(false)
+    FogMaskEnable(false)
 
-	// Setup end-of-the-line.
-	let endpoint_trig = CreateTrigger()
-	teams.forEach() team ->
-		endpoint_trig.registerRectEnterEventSource(team.a_waypoint.grow_to_rect(WAYPOINT_NOMINAL_RADIUS))
-		endpoint_trig.registerRectEnterEventSource(team.b_waypoint.grow_to_rect(WAYPOINT_NOMINAL_RADIUS))
-	endpoint_trig.addAction() ->
-		if creep_track.has(GetTriggerUnit())
-			let waypoints = creep_track.get(GetTriggerUnit())
-			if waypoints.mid_visited
-				let team_blob = get_team_from_creep(GetTriggerUnit())
-				addEffect(Abilities.massTeleportTarget, GetTriggerUnit().getPos()).destr()
-				team_blob.lives--
-				if team_blob.lives <= 0
-					print("Team " + team_blob.a.getName() + " & " + team_blob.b.getName() + " was defeated!")
-					nullTimer() ->
-						forUnitsOfPlayer(team_blob.a) u ->
-							u.remove()
-						forUnitsOfPlayer(team_blob.b) u ->
-							u.remove()
-						forUnitsOfPlayer(team_blob.creep) u ->
-							u.remove()
-				creep_track.remove(GetTriggerUnit())
-				destroy waypoints
+    doAfter(240.) ->
+        print("Did you know?  This map was made with just 608 lines of |cffffcc00WurstScript|r.")
 
-				GetTriggerUnit().remove()
+    // Player leave setup.
+    playerLeaves() pl ->
+        print(pl.getNameColored() + " has left the game!")
+        forUnitsOfPlayer(pl) u ->
+            u.remove()
 
-	onLeave() ->
-		if creep_track.has(GetTriggerUnit())
-			// Destroy creep_track waypoints.
-			destroy creep_track.getAndRemove(GetTriggerUnit())
+        let team = get_team_from_player(pl)
+        if not team.get_other_player(pl).isIngame()
+            team.lives = 0
+        else if team.lives > 0
+            team.lives++
 
-	doAfter(SETUP_TIME) ->
-		let cb = doPeriodicallyCounted(40., wave_count() + 1) cb ->
-			if not cb.isLast()
-				let rd = round_from_cb_count(cb.getCount())
-				print("|cffffcc00Round " + rd.toString() + ":|r " + SHIP_PROPS.get(rd).name)
+            printTimedToPlayer(
+                "You got an extra life to compensate.  Sweet.",
+                20.,
+                team.get_other_player(pl)
+            )
 
-				teams.forEach() team ->
-					team.do_round_spawn(rd)
-			else
-				print("|cffffcc00You win!  Congratulations.|r")
-				print("    |cff999999Game time: " + (getElapsedGameTime() / 60.).toInt().toString() + " minutes.|r")
-				doAfter(20.) ->
+    // Setup end-of-the-line.
+    let endpoint_trig = CreateTrigger()
+    teams.forEach() team ->
+        endpoint_trig.registerRectEnterEventSource(team.a_waypoint.grow_to_rect(WAYPOINT_NOMINAL_RADIUS))
+        endpoint_trig.registerRectEnterEventSource(team.b_waypoint.grow_to_rect(WAYPOINT_NOMINAL_RADIUS))
+    endpoint_trig.addAction() ->
+        if creep_track.has(GetTriggerUnit())
+            let waypoints = creep_track.get(GetTriggerUnit())
+            if waypoints.mid_visited
+                let team_blob = get_team_from_creep(GetTriggerUnit())
+                addEffect(Abilities.massTeleportTarget, GetTriggerUnit().getPos()).destr()
+                team_blob.lives--
+                if team_blob.lives <= 0
+                    print("Team " + team_blob.a.getName() + " & " + team_blob.b.getName() + " was defeated!")
+                    nullTimer() ->
+                        forUnitsOfPlayer(team_blob.a) u ->
+                            u.remove()
+                        forUnitsOfPlayer(team_blob.b) u ->
+                            u.remove()
+                        forUnitsOfPlayer(team_blob.creep) u ->
+                            u.remove()
 
-					// Destroy teams.
-					teams.forEach() team ->
-						destroy team
-					destroy teams
+                    if all_teams_lost()
+                        game_over = true
+                        print("Everyone lost!  The game will end shortly.")
+                        doAfter(20.) ->
+                            EndGame(true)
+                else
+                    printTimedToPlayer("Only " + team_blob.lives.toString() + " lives left!", 20., team_blob.a)
+                    printTimedToPlayer("Only " + team_blob.lives.toString() + " lives left!", 20., team_blob.b)
+                creep_track.remove(GetTriggerUnit())
+                destroy waypoints
 
-					// Destroy creep_track.
-					destroy creep_track
+                GetTriggerUnit().remove()
 
-					// End the game.
-					teams.forEach() team ->
-						if team.lives > 0
-							RemovePlayer(team.a, PLAYER_GAME_RESULT_VICTORY)
-							RemovePlayer(team.b, PLAYER_GAME_RESULT_VICTORY)
-						else
-							RemovePlayer(team.a, PLAYER_GAME_RESULT_DEFEAT)
-							RemovePlayer(team.b, PLAYER_GAME_RESULT_DEFEAT)
-					EndGame(true)
-		cb.setupDialogCallback() cb ->
-			let round = round_from_cb_count(cb.getCount())
-			var status = dialog_update_fn_res("Victory", false)
+    onLeave() ->
+        if creep_track.has(GetTriggerUnit())
+            // Destroy creep_track waypoints.
+            destroy creep_track.getAndRemove(GetTriggerUnit())
 
-			if round < SHIP_PROPS.size()
-				status = dialog_update_fn_res("Round " + round.toString(), true)
+    doAfter(SETUP_TIME) ->
+        print("Creeps (ships) spawn at each waygate, travel towards your team's shared base, and finally to your team mate's waygate.")
+        print("  |cffffcc00->|r Waygate")
+        print("  |cffffcc00->|r Shared base")
+        print("  |cffffcc00->|r Team mate's waygate")
+        doAfter(20.) ->
+            print("Train units and |cffffcc00maze in the shallow water|r to slow them down.")
+        doAfter(30.) ->
+            print("You have |cffffcc00" + LIVES.toString() + "|r lives.")
+        doAfter(35.) ->
+            print("Good luck!")
+        let cb = doPeriodicallyCounted(WAVE_DURATION, wave_count() + 1) cb ->
+            if game_over
+                cb.stop()
+            else
+                if not cb.isLast()
+                    let rd = round_from_cb_count(cb.getCount())
+                    print("|cffffcc00Round " + rd.toString() + ":|r " + SHIP_PROPS.get(rd).name)
 
-			return status
+                    teams.forEach() team ->
+                        team.do_round_spawn(rd)
+                else
+                    print("|cffffcc00You win!  Congratulations.|r")
+                    print("    |cff999999Game time: " + (getElapsedGameTime() / 60.).toInt().toString() + " minutes.|r")
+                    doAfter(20.) ->
+
+                        // Destroy teams.
+                        teams.forEach() team ->
+                            destroy team
+                        destroy teams
+
+                        // Destroy creep_track.
+                        destroy creep_track
+
+                        // End the game.
+                        teams.forEach() team ->
+                            if team.lives > 0
+                                RemovePlayer(team.a, PLAYER_GAME_RESULT_VICTORY)
+                                RemovePlayer(team.b, PLAYER_GAME_RESULT_VICTORY)
+                            else
+                                RemovePlayer(team.a, PLAYER_GAME_RESULT_DEFEAT)
+                                RemovePlayer(team.b, PLAYER_GAME_RESULT_DEFEAT)
+                        EndGame(true)
+        cb.setupDialogCallback() cb ->
+            let round = round_from_cb_count(cb.getCount())
+            var status = dialog_update_fn_res("Victory", false)
+
+            if round < SHIP_PROPS.size()
+                status = dialog_update_fn_res("Round " + round.toString(), true)
+
+            return status
