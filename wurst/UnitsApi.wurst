@@ -1,90 +1,120 @@
 package UnitsApi
 
 import Abilities
+import HashList
 import Icons
 import Units
 import UnitObjEditing
 
-public constant LEVEL_0 = 'wv00'
-public constant LEVEL_1 = 'wv01'
-public constant LEVEL_2 = 'wv02'
-public constant LEVEL_3 = 'wv03'
-public constant LEVEL_4 = 'wv04'
-public constant LEVEL_5 = 'wv05'
-public constant LEVEL_6 = 'wv06'
-public constant LEVEL_7 = 'wv07'
-public constant LEVEL_8 = 'wv08'
-public constant LEVEL_9 = 'wv09'
+class UnitProps
+    int id
+    string model
+    string name
+    real scale_size
+    ArmorType armor_type
+
+    function setup(int id, string model, string name, ArmorType armor_type, real scale_size)
+        this.id = id
+        this.model = model
+        this.name = name
+        this.scale_size = scale_size
+        this.armor_type = armor_type
+
+    construct(int id, string model, ArmorType armor_type, string name)
+        setup(id, model, name, armor_type, 0.5)
+
+    construct(int id, string model, ArmorType armor_type, string name, real scale_size)
+        setup(id, model, name, armor_type, scale_size)
+
+
+public constant SHIP_PROPS = new HashList<UnitProps>()..add(
+    new UnitProps('wv00', Units.orcishTransportShip, ArmorType.Large, "Dinghy", .4),
+    new UnitProps('wv01', Units.humanTransportShip1, ArmorType.Medium, "Sailor"),
+    new UnitProps('wv02', Units.humanDestroyerShip1, ArmorType.Small, "Interceptor"),
+    new UnitProps('wv03', Units.nightElfTransportShip1, ArmorType.Unarmored, "Crusader"),
+    new UnitProps('wv04', Units.orcishDestroyerShip1, ArmorType.Fortified, "Sea Punisher"),
+    new UnitProps('wv05', Units.undeadDestroyerShip1, ArmorType.Medium, "Destroyer"),
+    new UnitProps('wv06', Units.nightElfBattleship, ArmorType.Fortified, "Dominator"),
+    new UnitProps('wv07', Units.orcJuggernaught, ArmorType.Large, "Juggernaught"),
+    new UnitProps('wv08', Units.undeadShipBattleShip, ArmorType.Medium, "Overlord"),
+    new UnitProps('wv09', Units.undeadTransportShip1, ArmorType.Small, "Ghost ship"),
+    new UnitProps('wv10', Units.nightElfFishingBoat, ArmorType.Unarmored, "Fishing boat"),
+    new UnitProps('wv11', Units.nightElfDestroyerShip1, ArmorType.Large, "Battleship"),
+    new UnitProps('wv12', Units.humanBattleship, ArmorType.Medium, "Dreadnought"),
+    new UnitProps('wv13', Units.warWagon, ArmorType.Fortified, "Tank"),
+    new UnitProps('wv14', Units.bloodElfWagon, ArmorType.Unarmored, "Elven treasure wagon"),
+    new UnitProps('wv15', Units.obsidianStatue1, ArmorType.Small, "Floating artifact"),
+    new UnitProps('wv16', Units.undeadAirBarge1, ArmorType.Medium, "Yamato"),
+    new UnitProps('wv17', Units.wisp1, ArmorType.Hero, "Spirit", 1.),
+    new UnitProps('wv18', Units.goblinZeppelin, ArmorType.Small, "Goblin warship", .75),
+    new UnitProps('wv19', Units.orcishTransportShip, ArmorType.Large, "Agamemnon", .75)
+
+    // The game must be more interesting before adding more waves...
+)
 
 public constant ID_DEFENDER_0 = 'df00'
 public constant ID_DEFENDER_1 = 'df01'
 public constant ID_DEFENDER_2 = 'df02'
 public constant ID_DEFENDER_3 = 'df03'
+public constant ID_MELEE_DEF_0 = 'dfm0'
+public constant ID_MELEE_DEF_1 = 'dfm1'
+public constant ID_MELEE_DEF_2 = 'dfm2'
+public constant ID_MELEE_DEF_3 = 'dfm3'
+public constant ID_DONOTHING_DEF = 'dfnt'
 
 public constant ID_BARRACKS = 'raxx'
 
-public function ship_name(int round) returns string
-    switch round
-        case 0
-            return "Dingy"
-        case 1
-            return "Sailor"
-        case 2
-            return "Interceptor"
-        case 3
-            return "Crusader"
-        case 4
-            return "Sea Punisher"
-        case 5
-            return "Destroyer"
-        case 6
-            return "Dominator"
-        case 7
-            return "Juggernaught"
-        case 8
-            return "Overlord"
-        case 9
-            return "Ghost ship"
-        default
-            return "??"
-
 class BaseShip extends UnitDefinition
-    construct(int id, real scale, int ss, int hp, int bounty, string name, string model)
+    construct(int id, real scale, int ss, int hp, int bounty, string name, string model, ArmorType armor_type, int armor_amt)
         super(id, 'hbot')
         setScalingValue(scale)
         setSpeedBase(ss)
+        setArmorType(armor_type)
         setModelFile(model)
         setHitPointsMaximumBase(hp)
         setName(name)
         setGoldBountyAwardedBase(bounty - 1)
         setGoldBountyAwardedNumberofDice(1)
         setGoldBountyAwardedSidesperDie(1)
-        setCollisionSize(15.)  // 1 too small?  2 too small?  4 too small?  7 too small?
+        setCollisionSize(15.)  // 7 too small.
         setAttacksEnabled(1)
+        setAttack1AttackType(AttackType.Normal)
         setAttack1Range(250)
+        setAttack1TargetsAllowed("ground,structure,debris,air,item,ward")
         setAttack1ProjectileArt(Abilities.cannonTowerMissile)
         setAttack1ProjectileSpeed(800)
+        setAttack1CooldownTime(1.)
         setAttack1DamageBase(499)
         setAttack1DamageNumberofDice(1)
         setAttack1DamageSidesperDie(1)
+        setAttack1MaximumNumberofTargets(1)
+        setAttack1WeaponType(WeaponType.Missile)
         setSelectionScale(2.)
+        setNormalAbilities("")
+        setDefenseBase(armor_amt)
+        setGoldCost(0)
+
+public function wave_count() returns int
+    return SHIP_PROPS.size()
 
 @compiletime function createShips()
-    new BaseShip(LEVEL_0, 0.5, 140, 100, 5, ship_name(0), Units.orcishTransportShip)
-    new BaseShip(LEVEL_1, 0.5, 145, 110, 6, ship_name(1), Units.humanTransportShip1)
-    new BaseShip(LEVEL_2, 0.5, 150, 121, 7, ship_name(2), Units.humanDestroyerShip1)
-    new BaseShip(LEVEL_3, 0.5, 155, 133, 8, ship_name(3), Units.nightElfFishingBoat)
-    new BaseShip(LEVEL_4, 0.5, 160, 146, 9, ship_name(4), Units.orcishDestroyerShip1)
-    new BaseShip(LEVEL_5, 0.5, 165, 161, 10, ship_name(5), Units.undeadDestroyerShip1)
-    new BaseShip(LEVEL_6, 0.5, 170, 177, 11, ship_name(6), Units.nightElfBattleship)
-    new BaseShip(LEVEL_7, 0.5, 175, 195, 12, ship_name(7), Units.orcJuggernaught)
-    new BaseShip(LEVEL_8, 0.5, 180, 215, 13, ship_name(8), Units.undeadShipBattleShip)
-    new BaseShip(LEVEL_9, 0.9, 185, 237, 14, ship_name(9), Units.undeadTransportShip1)
+    for i = 0 to (wave_count() - 1)
+        let props = SHIP_PROPS.get(i)
+        new BaseShip(
+            props.id,
+            0.5,
+            140 + 5 * i,
+            2 * (100. * 1.2.pow(i.toReal())).toInt(),
+            5 + i,
+            props.name,
+            props.model,
+            props.armor_type,
+            i
+        )
 
 
 class BaseDefender extends UnitDefinition
-    construct(int id, int baseDamage, int range, int cost, string name, string model, string icon)
-        super(id, 'nhea')
+    function setup(int baseDamage, int range, int cost, string name, WeaponType wt, string projectileArt, string model, string icon)
         setButtonPositionX(0)
         setButtonPositionY(0)
         setAttack1DamageBase(baseDamage)
@@ -97,28 +127,86 @@ class BaseDefender extends UnitDefinition
         setBuildTime(1)
         setAcquisitionRange(range.toReal())
         setLumberCost(0)
-        setFoodCost(0)
+        setFoodCost(1)
         setName(name)
         setTooltipBasic("Train " + name)
         setTooltipExtended(
             "A ranged, mobile defender which can hold position and form a blockade.|n |n" +
-            "|cffffcc00Nominal damage:|r " + (baseDamage + 1).toString()
+            "|cffffcc00Nominal damage:|r " + (baseDamage + 1).toString() + "|n" +
+            "|cffffcc00Attack type:|r Piercing"
+        )
+        setIconGameInterface(icon)
+        setCollisionSize(32.) // 31 too small.
+        setAttack1CooldownTime(1.25)
+        setSelectionScale(1.5)
+        setAttack1WeaponType(wt)
+        setAttack1ProjectileArt(projectileArt)
+
+    construct(int id, int baseDamage, int range, int cost, string name, WeaponType wt, string projectileArt, string model, string icon)
+        super(id, 'nhea')
+        setup(baseDamage, range, cost, name, wt, projectileArt, model, icon)
+
+    construct(int id, int baseDamage, int range, int cost, string name, string model, string icon)
+        super(id, 'nhea')
+        setup(baseDamage, range, cost, name, WeaponType.Missile, Abilities.arrowMissile1, model, icon)
+
+class BaseMeleeDefender extends UnitDefinition
+    construct(int id, int baseDamage, int cost, string name, string model, string icon)
+        super(id, 'hfoo')
+        setButtonPositionX(0)
+        setButtonPositionY(1)
+        setAttack1DamageBase(baseDamage)
+        setNormalAbilities("")
+        setAttack1Range(100)
+        setModelFile(model)
+        setGoldCost(cost)
+        setStockMaximum(1)
+        setStockReplenishInterval(0)
+        setStockStartDelay(0)
+        setBuildTime(1)
+        setAcquisitionRange(100)
+        setLumberCost(0)
+        setFoodCost(1)
+        setName(name)
+        setTooltipBasic("Train " + name)
+        setTooltipExtended(
+            "A melee, mobile defender which can hold position and form a blockade.|n |n" +
+            "|cffffcc00Nominal damage:|r " + (baseDamage + 1).toString() + "|n" +
+            "|cffffcc00Attack type:|r Normal"
         )
         setIconGameInterface(icon)
         setCollisionSize(32.) // 31 too small.
         setAttack1CooldownTime(1.25)
         setSelectionScale(1.5)
 
+class DoNothingDefender extends BaseMeleeDefender
+    construct(int id, int cost, string name, string model, string icon)
+        super(id, 0, cost, name, model, icon)
+        setAttacksEnabled(0)
+        setTooltipExtended(
+            "A mobile defender which can hold position and form a blockade.|n |n" +
+            "|cffcc0000Does not attack.|r "
+        )
+
 @compiletime function createDefenders()
-    new BaseDefender(ID_DEFENDER_0,  10, 500,  50, "Elven Archer", Units.highElfArcher1, Icons.bTNHighElvenArcher)
-    new BaseDefender(ID_DEFENDER_1,  25, 510, 100, "Elven Ranger", Units.archer, Icons.bTNArcher)
-    new BaseDefender(ID_DEFENDER_2,  55, 520, 200, "Dwarven Rifleman", Units.rifleman1, Icons.bTNRifleman)
-    new BaseDefender(ID_DEFENDER_3, 115, 530, 400, "Space Marine", Units.marine, Icons.bTNMarine)
+    new BaseDefender(ID_DEFENDER_0,  10, 400,  50, "Elven Archer", Units.highElfArcher1, Icons.bTNHighElvenArcher)
+    new BaseDefender(ID_DEFENDER_1,  25, 410, 100, "Elven Ranger", Units.archer, Icons.bTNArcher)
+    new BaseDefender(ID_DEFENDER_2,  55, 420, 200, "Dwarven Rifleman", WeaponType.Instant, Abilities.rifleImpact, Units.rifleman1, Icons.bTNRifleman)
+    new BaseDefender(ID_DEFENDER_3, 115, 430, 400, "Space Marine", WeaponType.Instant, Abilities.rifleImpact, Units.marine, Icons.bTNMarine)
+
+    new BaseMeleeDefender(ID_MELEE_DEF_0,  15,  50, "Human Footman", Units.footman1, Icons.bTNFootman)
+    new BaseMeleeDefender(ID_MELEE_DEF_1,  35, 100, "Elven Swordsman", Units.theCaptain1, Icons.bTNTheCaptain)
+    new BaseMeleeDefender(ID_MELEE_DEF_2,  75, 200, "Elven Warden", Units.assassin1, Icons.bTNAssassin)
+    new BaseMeleeDefender(ID_MELEE_DEF_3, 155, 400, "Human Cavalry", Units.banditLord1, Icons.bTNBanditLord)
+
+    new DoNothingDefender(ID_DONOTHING_DEF, 10, "Human Villager", Units.villagerWoman1, Icons.bTNVillagerWoman)
 
 class Barracks extends BuildingDefinition
     construct(int id)
         super(id, 'hbar')
-        setUnitsTrained("df00,df01,df02,df03")
+        setFoodProduced(40)
+        setUnitsTrained("")
+        setUnitsSold("df00,df01,df02,df03,dfm0,dfm1,dfm2,dfm3,dfnt")
         setResearchesAvailable("")
         setPlacementRequires("")
 
