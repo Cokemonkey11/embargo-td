@@ -6,13 +6,15 @@ import Abilities
 import EventHelper
 import GameTimer
 import HashMap
+import Icons
 import OnUnitEnterLeave
 import LinkedList
+import Quest
 import UnitsApi
 import Buildings
 
 constant SETUP_TIME = 20.  // 15 seemed too low?
-constant WAVE_DURATION = 50.  // 40 seemed too low?  45 too.
+constant WAVE_DURATION = 55.  // 40 seemed too low?  45 too.  50 too.
 constant STARTING_GOLD = 300
 constant WAYPOINT_NOMINAL_RADIUS = 75.
 constant LOCAL_FLOAT_LOCALITY = 256. + 128.
@@ -230,6 +232,8 @@ function playerLeaves(PlayerLeavesCallback cb)
     for i = 0 to 23
         t.registerPlayerEvent(Player(i), EVENT_PLAYER_LEAVE)
 
+tuple team_and_unit(Team team, unit fx)
+
 init
     // Setup next-waypoint.
     let midpoint_trig = CreateTrigger()
@@ -275,12 +279,8 @@ init
                 otherTeam.a.setPlayerAlliance(team.creep, ALLIANCE_PASSIVE, true)
                 otherTeam.b.setPlayerAlliance(team.creep, ALLIANCE_PASSIVE, true)
 
-    // Misc setup.
-    FogEnable(false)
-    FogMaskEnable(false)
-
-    doAfter(240.) ->
-        print("Did you know?  This map was made with just 608 lines of |cffffcc00WurstScript|r.")
+    doAfter(360.) ->
+        print("Did you know?  This map was made with just 654 lines of |cffffcc00WurstScript|r.")
 
     // Player leave setup.
     playerLeaves() pl ->
@@ -340,17 +340,73 @@ init
             // Destroy creep_track waypoints.
             destroy creep_track.getAndRemove(GetTriggerUnit())
 
+    SetTimeOfDay(7.)
+
+    teams.forEach() team ->
+        let ship_a = createUnit(team.a, 'hbot', team.a_waypoint, team.a_waypoint.angleTo(team.mid_waypoint))
+            ..addAbility('Aloc')
+            ..issuePointOrder("smart", team.mid_waypoint)
+            ..setScale(0.5)
+        let ship_b = createUnit(team.b, 'hbot', team.b_waypoint, team.b_waypoint.angleTo(team.mid_waypoint))
+            ..addAbility('Aloc')
+            ..issuePointOrder("smart", team.mid_waypoint)
+            ..setScale(0.5)
+
+        doPeriodicallyCounted(3., 10) cb ->
+            ship_a.setXY(team.a_waypoint)
+            ship_b.setXY(team.b_waypoint)
+
+            if cb.isLast()
+                ship_a.remove()
+                ship_b.remove()
+
+    new Quest(true)
+        ..setTitle("Basics")
+        ..setIcon(Icons.bTNTomeOfRetraining)
+        ..setDescription("Embargo TD is a co-operative tower defense played in teams of two.  Creeps are ships which travel between islands.  Build a maze of units to kill the creeps - but be careful not to block!")
+
+    new Quest(false)
+        ..setTitle("Map Info")
+        ..setIcon(Icons.bTNMarketPlace)
+        ..setDescription("|cffffcc00Author:|r Cokemonkey11|n|cffffcc00Contact:|r hiveworkshop.com|n|cffffcc00Wurst:|r wurstlang.org|n|cffffcc00Github:|r github.com/cokemonkey11/embargo-td")
+
+
+    doPeriodicallyCounted(3., 10) outer_cb ->
+        doPeriodicallyCounted(1. / 10., (10.).toInt()) cb ->
+            teams.forEach() team ->
+                for i = 0 to 4
+                    var frac = i.toReal() / 5. + (cb.getCount() / 50.)
+                    while frac > 1.
+                        frac -= 1.
+
+                    addEffect(
+                        Abilities.orbOfDeathMissile,
+                        (
+                            team.a_waypoint * frac +
+                            team.mid_waypoint * (1. - frac)
+                        )
+                    ).destr()
+                    addEffect(
+                        Abilities.orbOfDeathMissile,
+                        (
+                            team.b_waypoint * frac +
+                            team.mid_waypoint * (1. - frac)
+                        )
+                    ).destr()
+
     doAfter(SETUP_TIME) ->
-        print("Creeps (ships) spawn at each waygate, travel towards your team's shared base, and finally to your team mate's waygate.")
-        print("  |cffffcc00->|r Waygate")
-        print("  |cffffcc00->|r Shared base")
-        print("  |cffffcc00->|r Team mate's waygate")
+        print("Creeps spawn at |cffffcc00each waygate|r, travel towards your team's |cffffcc00shared base|r, and then to your |cffffcc00team mate's waygate|r.")
         doAfter(20.) ->
             print("Train units and |cffffcc00maze in the shallow water|r to slow them down.")
         doAfter(30.) ->
             print("You have |cffffcc00" + LIVES.toString() + "|r lives.")
         doAfter(35.) ->
             print("Good luck!")
+
+            // Enable map-wide vision once the game starts.
+            FogEnable(false)
+            FogMaskEnable(false)
+
         let cb = doPeriodicallyCounted(WAVE_DURATION, wave_count() + 1) cb ->
             if game_over
                 cb.stop()

@@ -104,8 +104,8 @@ public function wave_count() returns int
             props.id,
             props.scale_size,
             140 + 5 * i,
-            2 * (90. * 1.15.pow(i.toReal())).toInt(),
-            7 + i,
+            2 * (85. * 1.15.pow(i.toReal())).toInt(),  // 90 seemed too high.
+            8 + i,  // 7 seemed too low.
             props.name,
             props.model,
             props.armor_type,
@@ -201,7 +201,7 @@ class DoNothingDefender extends BaseMeleeDefender
     new BaseMeleeDefender(ID_MELEE_DEF_2,  75, 200, "Elven Warden", "Assassin", Units.assassin1, Icons.bTNAssassin)
     new BaseMeleeDefender(ID_MELEE_DEF_3, 155, 400, "Human Cavalry", "Bandit", Units.banditLord1, Icons.bTNBanditLord)
 
-    new DoNothingDefender(ID_DONOTHING_DEF, 10, "Human Villager", "VillagerWoman", Units.villagerWoman1, Icons.bTNVillagerWoman)
+    new DoNothingDefender(ID_DONOTHING_DEF, 5, "Human Villager", "VillagerWoman", Units.villagerWoman1, Icons.bTNVillagerWoman)
 
 class Barracks extends BuildingDefinition
     construct(int id)
