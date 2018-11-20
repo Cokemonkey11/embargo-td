@@ -94,7 +94,7 @@ class BaseShip extends UnitDefinition
         setAttack1TargetsAllowed("ground,structure,debris,air,item,ward")
         setAttack1ProjectileArt(Abilities.cannonTowerMissile)
         setAttack1ProjectileSpeed(800)
-        setAttack1CooldownTime(1.)
+        setAttack1CooldownTime(1.5)
         setAttack1DamageBase(499)
         setAttack1DamageNumberofDice(1)
         setAttack1DamageSidesperDie(1)
@@ -116,7 +116,7 @@ public function wave_count() returns int
             props.id,
             props.scale_size,
             140 + 5 * i,
-            2 * (80. * 1.15.pow(i.toReal())).toInt(),  // 90 seemed too high.  85 seemed too high.
+            2 * (75. * 1.15.pow(i.toReal())).toInt(),  // 90 seemed too high.  85 seemed too high.  80 seemed too high.
             8 + i,  // 7 seemed too low.
             props.name,
             props.model,

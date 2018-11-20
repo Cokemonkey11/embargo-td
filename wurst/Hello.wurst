@@ -17,7 +17,7 @@ import UnitsApi
 import Buildings
 
 constant SETUP_TIME = 20.  // 15 seemed too low?
-constant WAVE_DURATION = 60.  // 40 seemed too low?  45 too.  50 too.  55 too.
+constant WAVE_DURATION = 65.  // 40 seemed too low?  45 too.  50 too.  55 too.  60 too.  Maybe fundamental problem - need to check lives remaining?
 constant STARTING_GOLD = 300
 constant WAYPOINT_NOMINAL_RADIUS = 75.
 constant LOCAL_FLOAT_LOCALITY = 256. + 128.
@@ -463,3 +463,5 @@ init
         if getDamageType() == DamageType.ATTACK and creep_track.has(attacker)
             let waypoints = creep_track.get(attacker)
             attacker.issuePointOrder("smart", waypoints.mid_visited ? waypoints.fin : waypoints.mid)
+            nullTimer() ->
+                attacker.issuePointOrder("smart", waypoints.mid_visited ? waypoints.fin : waypoints.mid)
