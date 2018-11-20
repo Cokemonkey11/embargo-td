@@ -1,10 +1,11 @@
 package UnitsApi
 
 import Abilities
+import AbilityObjEditing
 import HashList
 import Icons
+import ObjectIds
 import Units
-import UnitObjEditing
 
 class UnitProps
     int id
@@ -61,8 +62,17 @@ public constant ID_MELEE_DEF_1 = 'dfm1'
 public constant ID_MELEE_DEF_2 = 'dfm2'
 public constant ID_MELEE_DEF_3 = 'dfm3'
 public constant ID_DONOTHING_DEF = 'dfnt'
+public constant ID_MAGIC_DEF_0 = 'dmg0'
+public constant ID_SIEGE_DEF_0 = 'dsg0'
+
+constant ID_MORTAR_DOT = 'mtdt'
+public constant ID_COLSN_CIRCLE = 'clsn'
 
 public constant ID_BARRACKS = 'raxx'
+
+class CollisionCircle extends AbilityDefinitionItemRegenManalesser
+    construct(int id)
+        super(id)
 
 class BaseShip extends UnitDefinition
     construct(int id, real scale, int ss, int hp, int bounty, string name, string model, ArmorType armor_type, int armor_amt)
@@ -71,12 +81,13 @@ class BaseShip extends UnitDefinition
         setSpeedBase(ss)
         setArmorType(armor_type)
         setModelFile(model)
+        setUnitClassification("")
         setHitPointsMaximumBase(hp)
         setName(name)
         setGoldBountyAwardedBase(bounty - 1)
         setGoldBountyAwardedNumberofDice(1)
         setGoldBountyAwardedSidesperDie(1)
-        setCollisionSize(15.)  // 7 too small.
+        setCollisionSize(1.)  // 7 too small?  15 was pretty good, until they attacked while crossing over.
         setAttacksEnabled(1)
         setAttack1AttackType(AttackType.Normal)
         setAttack1Range(250)
@@ -91,6 +102,7 @@ class BaseShip extends UnitDefinition
         setAttack1WeaponType(WeaponType.Missile)
         setSelectionScale(2.)
         setNormalAbilities("")
+        setUpgradesUsed("")
         setDefenseBase(armor_amt)
         setGoldCost(0)
 
@@ -104,7 +116,7 @@ public function wave_count() returns int
             props.id,
             props.scale_size,
             140 + 5 * i,
-            2 * (85. * 1.15.pow(i.toReal())).toInt(),  // 90 seemed too high.
+            2 * (80. * 1.15.pow(i.toReal())).toInt(),  // 90 seemed too high.  85 seemed too high.
             8 + i,  // 7 seemed too low.
             props.name,
             props.model,
@@ -114,22 +126,24 @@ public function wave_count() returns int
 
 
 class BaseDefender extends UnitDefinition
-    function setup(int baseDamage, int range, int cost, string name, string sound_set, WeaponType wt, string projectileArt, string model, string icon)
+    function setup(int upgrades_to, bool for_sale, int baseDamage, int range, int cost, string name, string sound_set, WeaponType wt, string projectileArt, string model, string icon)
         setButtonPositionX(0)
-        setButtonPositionY(0)
+        setButtonPositionY(for_sale ? 1 : 2)
         setAttack1DamageBase(baseDamage)
+        setNormalAbilities(commaList(ID_COLSN_CIRCLE))
         setAttack1Range(range)
         setModelFile(model)
         setGoldCost(cost)
         setStockMaximum(1)
         setStockReplenishInterval(0)
         setStockStartDelay(0)
+        setUpgradesUsed("")
         setBuildTime(1)
         setAcquisitionRange(range.toReal())
         setLumberCost(0)
         setFoodCost(1)
         setName(name)
-        setTooltipBasic("Train " + name)
+        setTooltipBasic((for_sale ? "Train " : "Upgrade to ") + name)
         setTooltipExtended(
             "A ranged, mobile defender which can hold position and form a blockade.|n |n" +
             "|cffffcc00Nominal damage:|r " + (baseDamage + 1).toString() + "|n" +
@@ -138,27 +152,73 @@ class BaseDefender extends UnitDefinition
         setIconGameInterface(icon)
         setCollisionSize(32.) // 31 too small.
         setAttack1CooldownTime(1.25)
-        setSelectionScale(1.5)
+        setSelectionScale(.75)
         setAttack1WeaponType(wt)
         setUnitSoundSet(sound_set)
         setAttack1ProjectileArt(projectileArt)
+        setUnitsSold(upgrades_to > 0 ? upgrades_to.toRawCode() : "")
 
-    construct(int id, int baseDamage, int range, int cost, string name, string sound_set, WeaponType wt, string projectileArt, string model, string icon)
+    construct(int id, int upgrades_to, bool for_sale, int baseDamage, int range, int cost, string name, string sound_set, WeaponType wt, string projectileArt, string model, string icon)
         super(id, 'nhea')
-        setup(baseDamage, range, cost, name, sound_set, wt, projectileArt, model, icon)
+        setup(upgrades_to, for_sale, baseDamage, range, cost, name, sound_set, wt, projectileArt, model, icon)
 
-    construct(int id, int baseDamage, int range, int cost, string name, string sound_set, string model, string icon)
+    construct(int id, int upgrades_to, bool for_sale, int baseDamage, int range, int cost, string name, string sound_set, string model, string icon)
         super(id, 'nhea')
-        setup(baseDamage, range, cost, name, sound_set, WeaponType.Missile, Abilities.arrowMissile1, model, icon)
+        setup(upgrades_to, for_sale, baseDamage, range, cost, name, sound_set, WeaponType.Missile, Abilities.arrowMissile1, model, icon)
+
+
+class BaseMagicDefender extends BaseDefender
+    construct(int id, int upgrades_to, bool for_sale, int baseDamage, int range, int cost, string name, string sound_set, AttackType at, WeaponType wt, string projectileArt, string model, string icon)
+        super(id, upgrades_to, for_sale, baseDamage, range, cost, name, sound_set, wt, projectileArt, model, icon)
+        setAttack1AttackType(at)
+
+        setTooltipExtended(
+            "A ranged, mobile defender which can hold position and form a blockade.|n |n" +
+            "|cffffcc00Nominal damage:|r " + (baseDamage + 1).toString() + "|n" +
+            "|cffffcc00Attack type:|r Magic"
+        )
+        setAttack1ProjectileArc(.05)
+        setAttack1ProjectileSpeed(1200)
+        setNormalAbilities(commaList(ID_COLSN_CIRCLE, 'ACbh'))  // Bash (Neutral Hostile 1).
+        setAttack1AnimationBackswingPoint(0.4)
+        setAttack1AnimationDamagePoint(0.1)
+
+
+class MortarBonusDot extends AbilityDefinitionVenomSpearsCreep
+    construct(int id)
+        super(id)
+        setIconNormal(Icons.pASBTNHumanArtilleryUpOne)
+        setDurationNormal(1, 10.)
+        setName("Lead Tips")
+        setTooltipNormal(1, "Lead Tips")
+        setTooltipNormalExtended(1, "Deals |cffffcc0020|r bonus damage over time on-hit.")
+
+
+class BaseSiegeDefender extends BaseDefender
+    construct(int id, int upgrades_to, bool for_sale, int baseDamage, int range, int cost, string name, string sound_set, AttackType at, WeaponType wt, string projectileArt, string model, string icon)
+        super(id, upgrades_to, for_sale, baseDamage, range, cost, name, sound_set, wt, projectileArt, model, icon)
+        setAttack1AttackType(at)
+
+        setTooltipExtended(
+            "A ranged, mobile defender which can hold position and form a blockade.|n |n" +
+            "|cffffcc00Nominal damage:|r " + (baseDamage + 1).toString() + "|n" +
+            "|cffffcc00Attack type:|r Siege"
+        )
+        setAttack1ProjectileArc(.15)
+        setAttack1ProjectileSpeed(500)
+        setNormalAbilities(commaList(ID_COLSN_CIRCLE, ID_MORTAR_DOT))
+
 
 class BaseMeleeDefender extends UnitDefinition
-    construct(int id, int baseDamage, int cost, string name, string sound_set, string model, string icon)
+    construct(int id, int upgrades_to, bool for_sale, int baseDamage, int cost, string name, string sound_set, string model, string icon)
         super(id, 'hfoo')
+        setUnitsSold(upgrades_to > 0 ? upgrades_to.toRawCode() : "")
         setButtonPositionX(0)
-        setButtonPositionY(1)
+        setButtonPositionY(for_sale ? 1 : 2)
         setAttack1DamageBase(baseDamage)
-        setNormalAbilities("")
+        setNormalAbilities(commaList(ID_COLSN_CIRCLE))
         setAttack1Range(100)
+        setUpgradesUsed("")
         setModelFile(model)
         setGoldCost(cost)
         setStockMaximum(1)
@@ -170,7 +230,7 @@ class BaseMeleeDefender extends UnitDefinition
         setLumberCost(0)
         setFoodCost(1)
         setName(name)
-        setTooltipBasic("Train " + name)
+        setTooltipBasic((for_sale ? "Train " : "Upgrade to ") + name)
         setTooltipExtended(
             "A melee, mobile defender which can hold position and form a blockade.|n |n" +
             "|cffffcc00Nominal damage:|r " + (baseDamage + 1).toString() + "|n" +
@@ -179,36 +239,50 @@ class BaseMeleeDefender extends UnitDefinition
         setIconGameInterface(icon)
         setCollisionSize(32.) // 31 too small.
         setAttack1CooldownTime(1.25)
-        setSelectionScale(1.5)
+        setSelectionScale(.75)
 
 class DoNothingDefender extends BaseMeleeDefender
-    construct(int id, int cost, string name, string sound_set, string model, string icon)
-        super(id, 0, cost, name, sound_set, model, icon)
+    construct(int id, int upgrades_to, bool for_sale, int cost, string name, string sound_set, string model, string icon)
+        super(id, upgrades_to, for_sale, 0, cost, name, sound_set, model, icon)
         setAttacksEnabled(0)
+        setButtonPositionY(for_sale ? 0 : 2)
         setTooltipExtended(
             "A mobile defender which can hold position and form a blockade.|n |n" +
             "|cffcc0000Does not attack.|r "
         )
 
 @compiletime function createDefenders()
-    new BaseDefender(ID_DEFENDER_0,  10, 400,  50, "Elven Archer", "Archer", Units.highElfArcher1, Icons.bTNHighElvenArcher)
-    new BaseDefender(ID_DEFENDER_1,  25, 410, 100, "Elven Ranger", "Archer", Units.archer, Icons.bTNArcher)
-    new BaseDefender(ID_DEFENDER_2,  55, 420, 200, "Dwarven Rifleman", "Rifleman", WeaponType.Instant, Abilities.rifleImpact, Units.rifleman1, Icons.bTNRifleman)
-    new BaseDefender(ID_DEFENDER_3, 115, 430, 400, "Space Marine", "TerranMarine", WeaponType.Instant, Abilities.rifleImpact, Units.marine, Icons.bTNMarine)
+    new CollisionCircle(ID_COLSN_CIRCLE)
+    new MortarBonusDot(ID_MORTAR_DOT)
 
-    new BaseMeleeDefender(ID_MELEE_DEF_0,  15,  50, "Human Footman", "Footman", Units.footman1, Icons.bTNFootman)
-    new BaseMeleeDefender(ID_MELEE_DEF_1,  35, 100, "Elven Swordsman", "HighElfSwordsman", Units.theCaptain1, Icons.bTNTheCaptain)
-    new BaseMeleeDefender(ID_MELEE_DEF_2,  75, 200, "Elven Warden", "Assassin", Units.assassin1, Icons.bTNAssassin)
-    new BaseMeleeDefender(ID_MELEE_DEF_3, 155, 400, "Human Cavalry", "Bandit", Units.banditLord1, Icons.bTNBanditLord)
+    new BaseDefender(ID_DEFENDER_0, ID_DEFENDER_1, true,   10, 400,  50,       "Elven Archer", "Archer", Units.highElfArcher1, Icons.bTNHighElvenArcher)
+    new BaseDefender(ID_DEFENDER_1, ID_DEFENDER_2, false,  25, 410, 100 -  50, "Elven Ranger", "Archer", Units.archer, Icons.bTNArcher)
+    new BaseDefender(ID_DEFENDER_2, ID_DEFENDER_3, false,  55, 420, 200 - 100, "Dwarven Rifleman", "Rifleman", WeaponType.Instant, Abilities.rifleImpact, Units.rifleman1, Icons.bTNRifleman)
+    new BaseDefender(ID_DEFENDER_3, 0,             false, 115, 430, 400 - 200, "Space Marine", "TerranMarine", WeaponType.Instant, Abilities.rifleImpact, Units.marine, Icons.bTNMarine)
 
-    new DoNothingDefender(ID_DONOTHING_DEF, 5, "Human Villager", "VillagerWoman", Units.villagerWoman1, Icons.bTNVillagerWoman)
+    new BaseMeleeDefender(ID_MELEE_DEF_0, ID_MELEE_DEF_1, true,   15,  50,       "Human Footman", "Footman", Units.footman1, Icons.bTNFootman)
+    new BaseMeleeDefender(ID_MELEE_DEF_1, ID_MELEE_DEF_2, false,  35, 100 -  50, "Elven Swordsman", "HighElfSwordsman", Units.theCaptain1, Icons.bTNTheCaptain)
+    new BaseMeleeDefender(ID_MELEE_DEF_2, ID_MELEE_DEF_3, false,  75, 200 - 100, "Elven Warden", "Assassin", Units.assassin1, Icons.bTNAssassin)
+    new BaseMeleeDefender(ID_MELEE_DEF_3, 0,              false, 155, 400 - 200, "Human Cavalry", "Bandit", Units.banditLord1, Icons.bTNBanditLord)
+
+    new DoNothingDefender(ID_DONOTHING_DEF, 0, true,  5, "Human Villager", "VillagerWoman", Units.villagerWoman1, Icons.bTNVillagerWoman)
+    new BaseMagicDefender(ID_MAGIC_DEF_0,   0, true, 15, 600, 100, "Elven Stormcaller", "DruidOfTheTalon", AttackType.Magic, WeaponType.Missile, Abilities.farseerMissile, Units.druidoftheTalon, Icons.bTNDruidOfTheTalon)
+    new BaseSiegeDefender(ID_SIEGE_DEF_0,   0, true, 30, 450, 200, "Dwarven Mortar team", "MortarTeam", AttackType.Siege, WeaponType.Missile, Abilities.cannonTowerMissile, Units.mortarTeam1, Icons.bTNMortarTeam)
 
 class Barracks extends BuildingDefinition
     construct(int id)
         super(id, 'hbar')
         setFoodProduced(40)
         setUnitsTrained("")
-        setUnitsSold("df00,df01,df02,df03,dfm0,dfm1,dfm2,dfm3,dfnt")
+        setUnitsSold(
+            commaList(
+                ID_DONOTHING_DEF,
+                ID_DEFENDER_0,
+                ID_MELEE_DEF_0,
+                ID_MAGIC_DEF_0,
+                ID_SIEGE_DEF_0
+            )
+        )
         setResearchesAvailable("")
         setPlacementRequires("")
 

@@ -79,9 +79,7 @@ public abstract class CallbackSingle
     ondestroy
         t.release()
 
-
 public tuple dialog_update_fn_res(string name, bool display)
-
 public abstract class PeriodicDialogUpdateFn
     protected abstract function call(CallbackPeriodic cb) returns dialog_update_fn_res
 
