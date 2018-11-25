@@ -1,5 +1,6 @@
-package Hello
+package Game
 
+import Board
 import ClosureForGroups
 import ClosureTimersFork
 import Abilities
@@ -26,6 +27,8 @@ constant SPAWN_INTERVAL = 1.75  // Spawn during round after this period.  2 seem
 constant BUILDING_ANGLE = angle(3. * PI / 2.)
 constant SPAWN_POINT_PATHING_WIDTH = 128.
 constant LIVES = 30
+
+constant ORDER_HOLD_POSITION = "holdposition"
 
 var game_over = false
 
@@ -59,7 +62,11 @@ function rax_id() returns int
     return ID_BARRACKS
 
 
-function player.spawn_round(int whichRound, vec2 start, vec2 mid, vec2 fin, bool have_partner)
+function unit.select_for_player(player who)
+    who.selectSingle(this)
+
+
+function player.spawn_round(int whichRound, vec2 start, vec2 mid, vec2 fin, bool have_partner, bool is_night_round)
     let creep_id_res = creep_from_round(whichRound)
     if creep_id_res.err != CreepRoundErr.NONE
         return
@@ -67,6 +74,8 @@ function player.spawn_round(int whichRound, vec2 start, vec2 mid, vec2 fin, bool
     let u = createUnit(this, creep_id_res.val, start, angle(0.))
     if not have_partner
         u.setHP(u.getHP() / 2.)
+    if is_night_round
+        u.setVertexColor(155, 155, 155, 155)
 
     creep_track.put(u, new Waypoints(mid, fin))
     u.issuePointOrder("smart", mid)
@@ -191,14 +200,27 @@ class Team
         this.spawn_point_b.destr()
         this.midpoint_fx.destr()
 
+    // Hold all the unselected units.
+    function hold_untouched_units()
+        nullTimer() ->
+            forUnitsOfPlayer(this.a) u ->
+                if not IsUnitSelected(u, this.a)
+                    u.issueImmediateOrder(ORDER_HOLD_POSITION)
+
+            forUnitsOfPlayer(this.b) u ->
+                if not IsUnitSelected(u, this.b)
+                    u.issueImmediateOrder(ORDER_HOLD_POSITION)
+
     // Spawn a whole wave.
     function do_round_spawn(int whichRound)
-        doPeriodicallyCounted(SPAWN_INTERVAL, 10) cb ->
-            if this.lives > 0
-                if this.a.isIngame()
-                    this.creep.spawn_round(whichRound, this.a_waypoint, this.mid_waypoint, this.b_waypoint, this.b.isIngame())
-                if this.b.isIngame()
-                    this.creep.spawn_round(whichRound, this.b_waypoint, this.mid_waypoint, this.a_waypoint, this.a.isIngame())
+        let props = SHIP_PROPS.get(whichRound)
+        if props != null
+            doPeriodicallyCounted(SPAWN_INTERVAL, props.is_boss ? 1 : ROUND_COUNT) cb ->
+                if this.lives > 0
+                    if this.a.isIngame()
+                        this.creep.spawn_round(whichRound, this.a_waypoint, this.mid_waypoint, this.b_waypoint, this.b.isIngame(), props.is_night_round)
+                    if this.b.isIngame()
+                        this.creep.spawn_round(whichRound, this.b_waypoint, this.mid_waypoint, this.a_waypoint, this.a.isIngame(), props.is_night_round)
 
 
 function round_from_cb_count(int cb_count) returns int
@@ -210,6 +232,7 @@ let teams = new LinkedList<Team>()..add(
     new Team(Player(4), Player(5), Player(10)),
     new Team(Player(6), Player(7), Player(11))
 )
+
 
 function get_team_from_creep(unit u) returns Team
     let owner = u.getOwner()
@@ -253,12 +276,16 @@ init
     // Setup barracks.
     teams.forEach() team ->
         if team.a.isIngame()
-            createUnit(team.a, rax_id(), team.a_start, BUILDING_ANGLE)
-            createUnit(team.a, rax_id(), team.mid - vec2(256., 0.), BUILDING_ANGLE)
+            let u = createUnit(team.a, rax_id(), team.a_start, BUILDING_ANGLE)..select_for_player(team.a)
+            SetUnitInvulnerable(u, true)
+            let u2 = createUnit(team.a, rax_id(), team.mid - vec2(256., 0.), BUILDING_ANGLE)
+            SetUnitInvulnerable(u2, true)
 
         if team.b.isIngame()
-            createUnit(team.b, rax_id(), team.b_start, BUILDING_ANGLE)
-            createUnit(team.b, rax_id(), team.mid + vec2(256., 0.), BUILDING_ANGLE)
+            let u = createUnit(team.b, rax_id(), team.b_start, BUILDING_ANGLE)..select_for_player(team.b)
+            SetUnitInvulnerable(u, true)
+            let u2 = createUnit(team.b, rax_id(), team.mid + vec2(256., 0.), BUILDING_ANGLE)
+            SetUnitInvulnerable(u2, true)
 
     // Setup starting gold.
     teams.forEach() team ->
@@ -281,8 +308,21 @@ init
                 otherTeam.a.setPlayerAlliance(team.creep, ALLIANCE_PASSIVE, true)
                 otherTeam.b.setPlayerAlliance(team.creep, ALLIANCE_PASSIVE, true)
 
+        // Others are allied/share vision to this team.
+        nullTimer() ->
+            teams.forEach() otherTeam ->
+                if otherTeam.a != team.a
+                    otherTeam.a.setPlayerAlliance(team.a, ALLIANCE_PASSIVE, true)
+                    otherTeam.a.setPlayerAlliance(team.a, ALLIANCE_SHARED_VISION, true)
+                    otherTeam.a.setPlayerAlliance(team.b, ALLIANCE_PASSIVE, true)
+                    otherTeam.a.setPlayerAlliance(team.b, ALLIANCE_SHARED_VISION, true)
+                    otherTeam.b.setPlayerAlliance(team.b, ALLIANCE_PASSIVE, true)
+                    otherTeam.b.setPlayerAlliance(team.b, ALLIANCE_SHARED_VISION, true)
+                    otherTeam.b.setPlayerAlliance(team.a, ALLIANCE_PASSIVE, true)
+                    otherTeam.b.setPlayerAlliance(team.a, ALLIANCE_SHARED_VISION, true)
+
     doAfter(480.) ->
-        print("Did you know?  This map was made with just 751 lines of |cffffcc00WurstScript|r.")
+        print("Did you know?  This map was made with just 1004 lines of |cffffcc00WurstScript|r.")
 
     // Player leave setup.
     playerLeaves() pl ->
@@ -343,6 +383,7 @@ init
             destroy creep_track.getAndRemove(GetTriggerUnit())
 
     SetTimeOfDay(7.)
+    SetTimeOfDayScale(0.)
 
     teams.forEach() team ->
         let ship_a = createUnit(team.a, 'hbot', team.a_waypoint, team.a_waypoint.angleTo(team.mid_waypoint))
@@ -393,30 +434,25 @@ init
         doAfter(35.) ->
             print("Good luck!")
 
-            // Enable map-wide vision once the game starts.
-            FogEnable(false)
-            FogMaskEnable(false)
-
         let cb = doPeriodicallyCounted(WAVE_DURATION, wave_count() + 1) cb ->
             if game_over
                 cb.stop()
             else
                 if not cb.isLast()
                     let rd = round_from_cb_count(cb.getCount())
-                    print("|cffffcc00Round " + rd.toString() + ":|r " + SHIP_PROPS.get(rd).name)
+                    let props = SHIP_PROPS.get(rd)
+                    SetTimeOfDay(props.is_night_round ? 19. : 7.)
+                    print("|cffffcc00Round " + rd.toString() + ":|r " + props.name)
+
+                    update_wave_board(SHIP_PROPS, rd)
 
                     teams.forEach() team ->
+                        team.hold_untouched_units()
                         team.do_round_spawn(rd)
                 else
                     print("|cffffcc00You win!  Congratulations.|r")
                     print("    |cff999999Game time: " + (getElapsedGameTime() / 60.).toInt().toString() + " minutes.|r")
                     doAfter(20.) ->
-
-                        // Destroy teams.
-                        teams.forEach() team ->
-                            destroy team
-                        destroy teams
-
                         // Destroy creep_track.
                         destroy creep_track
 
@@ -431,11 +467,12 @@ init
                         EndGame(true)
 
         cb.setupDialogCallback() cb2 ->
-            let round = round_from_cb_count(cb2.getCount())
             var status = dialog_update_fn_res("Victory", false)
+            if cb2 != null
+                let round = round_from_cb_count(cb2.getCount())
 
-            if round < SHIP_PROPS.size()
-                status = dialog_update_fn_res("Round " + round.toString(), true)
+                if round < SHIP_PROPS.size()
+                    status = dialog_update_fn_res("Round " + round.toString(), true)
 
             return status
 
@@ -452,16 +489,17 @@ init
                 GetSoldUnit()
                     ..setXY(pos)
                     ..setFacing(face)
-                    ..issueImmediateOrder("holdposition"),
+                    ..issueImmediateOrder(ORDER_HOLD_POSITION),
                 GetOwningPlayer(GetSoldUnit())
             )
 
 
     // Order attacking creeps to try moving again.
     addOnDamageFunc() ->
-        let attacker = GetAttacker()
+        let attacker = GetEventDamageSource()
         if getDamageType() == DamageType.ATTACK and creep_track.has(attacker)
             let waypoints = creep_track.get(attacker)
+            attacker.removeAbility('Aatk')
             attacker.issuePointOrder("smart", waypoints.mid_visited ? waypoints.fin : waypoints.mid)
             nullTimer() ->
                 attacker.issuePointOrder("smart", waypoints.mid_visited ? waypoints.fin : waypoints.mid)

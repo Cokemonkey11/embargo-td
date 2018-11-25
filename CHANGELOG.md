@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 - Nothing yet.
 
+## [0.2.0] - 2018-11-25
+### Added
+- Boss rounds.
+- Night rounds.
+- Wave information multiboard.
+- Upgrade hotkeys.
+- Automatically attach units feature.
+
+### Changed
+- Reduced Fortified armor damage reduction.
+- Reduced creep collision size to prevent attacking.
+- Barracks are now invulnerable.
+- New map preview thanks for Frotty.
+
 ## [0.1.1] - 2018-11-20
 ### Changed
 - Increased the round duration.

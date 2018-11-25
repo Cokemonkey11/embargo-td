@@ -139,9 +139,10 @@ public abstract class CallbackCounted
     function setupDialogCallback(CountedDialogUpdateFn update_fn)
         this.update_fn = update_fn
         this.dialg = CreateTimerDialog(this.t)
-        let update_result = update_fn.call(this)
-        TimerDialogDisplay(this.dialg, update_result.display)
-        TimerDialogSetTitle(this.dialg, update_result.name)
+        if update_fn != null
+            let update_result = update_fn.call(this)
+            TimerDialogDisplay(this.dialg, update_result.display)
+            TimerDialogSetTitle(this.dialg, update_result.name)
 
     function isLast() returns boolean
         return count == 1
@@ -155,7 +156,7 @@ public abstract class CallbackCounted
     private static function staticCallback()
         let cb = (GetExpiredTimer().getData() castTo thistype)
         cb.callAndCount()
-        if cb.update_fn != null
+        if cb != null and cb.update_fn != null and cb.dialg != null
             let update_result = cb.update_fn.call(cb)
             TimerDialogDisplay(cb.dialg, update_result.display)
             TimerDialogSetTitle(cb.dialg, update_result.name)

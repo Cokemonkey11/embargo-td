@@ -1,0 +1,78 @@
+package Board
+
+import ClosureTimersFork
+import HashList
+import Icons
+import UnitsApi
+import UnitObjEditing
+
+
+constant WIDTH_CARETS = .02
+constant WIDTH_NORMAL = .09
+constant WIDTH_ARMOR  = .06
+constant WIDTH_INFO   = .06
+
+let wave_board = CreateMultiboard()
+
+
+function armor_type_to_string(ArmorType typ) returns string
+    switch typ
+        case ArmorType.Small
+            return "Light"
+        case ArmorType.Medium
+            return "Medium"
+        case ArmorType.Large
+            return "Heavy"
+        case ArmorType.Fortified
+            return "Fortified"
+        case ArmorType.Hero
+            return "Hero"
+        case ArmorType.Unarmored
+            return "Unarmored"
+        default
+            return "?? " + typ.toObjectString()
+
+
+/// Display at most one of the properties as info status.
+function info_status_from_props(UnitProps props) returns string
+    return props.is_night_round ? "Night round" : (props.is_boss ? "Boss" : "")
+
+
+public function update_wave_board(HashList<UnitProps> props, int round)
+    for i = 1 to 3
+        let wv = props.get(round + i - 1)
+        wave_board.getItem(i, 1)
+            ..setValue(wv == null ? "??" : wv.name)
+            ..setIcon(wv == null ? Icons.bTNSelectHeroOn : wv.icon)
+            ..release()
+        wave_board.getItem(i, 2)
+            ..setValue(wv == null ? "??" : armor_type_to_string(wv.armor_type))
+            ..release()
+        wave_board.getItem(i, 3)
+            ..setValue(wv == null ? "" : info_status_from_props(wv))
+            ..release()
+
+
+init
+    nullTimer() ->
+        wave_board
+            ..setColumnCount(4)
+            ..setRowCount(4)
+            ..setTitle("Waves")
+            ..setItemsWidth(WIDTH_NORMAL)
+            ..setItemsStyle(true, false)
+        wave_board.getItem(0, 0)..setWidth(WIDTH_CARETS)..setValue("")..release()
+        wave_board.getItem(1, 0)..setWidth(WIDTH_CARETS)..setValue("|cffffcc00>>|r")..release()
+        wave_board.getItem(0, 1)..setWidth(WIDTH_NORMAL)..setValue("|cffffcc00Wave|r")..release()
+        wave_board.getItem(0, 2)..setWidth(WIDTH_ARMOR)..setValue("|cffffcc00Armor|r")..release()
+        wave_board.getItem(0, 3)..setWidth(WIDTH_INFO)..setValue("|cffffcc00Info|r")..release()
+        wave_board..display(true)..minimalize(false)
+
+        for i = 1 to 4
+            wave_board.getItem(i, 0)..setWidth(WIDTH_CARETS)..release()
+            wave_board.getItem(i, 1)..setValue(i.toString())..setWidth(WIDTH_NORMAL)..setStyle(true, true)..release()
+            wave_board.getItem(i, 2)..setValue("")..setWidth(WIDTH_ARMOR)..release()
+            wave_board.getItem(i, 3)..setValue("")..setWidth(WIDTH_INFO)..release()
+
+        nullTimer() ->
+            update_wave_board(SHIP_PROPS, 0)

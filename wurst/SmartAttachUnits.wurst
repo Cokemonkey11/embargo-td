@@ -1,0 +1,34 @@
+package SmartAttachUnits
+
+import ClosureTimers
+import RegisterEvents
+import Sounds
+
+
+constant LOCK_DIST   =  96. // 32.
+constant MAX_DIST_SQ = 256. * 256.
+
+constant ORDER_SMART = OrderId("smart")
+
+
+init
+    registerPlayerUnitEvent(EVENT_PLAYER_UNIT_ISSUED_UNIT_ORDER) ->
+        let u = GetTriggerUnit()
+        let order = GetIssuedOrderId()
+        let target = GetOrderTargetUnit()
+
+        if order == ORDER_SMART and u.getPos().distanceToSq(target.getPos()) < MAX_DIST_SQ
+            u.issueImmediateOrder("stop")
+            SelectUnitRemoveForPlayer(u, u.getOwner())
+            nullTimer() ->
+                u.issueImmediateOrder("stop")
+                u.setXY(
+                    target.getPos().moveTowards(u.getPos(), LOCK_DIST)
+                )
+                let snd = CreateSound(Sounds.rescue, false, true, false, 12700, 12700, "")
+                SetSoundPosition(snd, target.getPos().x, target.getPos().y, 100.)
+                KillSoundWhenDone(snd)
+                snd.play()
+                u.issueImmediateOrder("holdposition")
+                target.issueImmediateOrder("holdposition")
+                u.setFacing(target.getFacingAngle())
