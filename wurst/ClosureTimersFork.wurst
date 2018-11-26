@@ -60,9 +60,14 @@ public function doPeriodicallyTimed(real interval, real timerDuration, CallbackC
     return cb
 
 //Timer Stuff
+public abstract class SingleDialogUpdateFn
+    protected abstract function call(CallbackSingle cb) returns dialog_update_fn_res
+
 public abstract class CallbackSingle
     private timer t
     abstract function call()
+    private SingleDialogUpdateFn update_fn = null
+    private timerdialog dialg = null
 
     function start(real time)
         t = getTimer()
@@ -76,8 +81,20 @@ public abstract class CallbackSingle
         cb.call()
         destroy cb
 
+    function setupDialogCallback(SingleDialogUpdateFn update_fn)
+        this.update_fn = update_fn
+        this.dialg = CreateTimerDialog(this.t)
+        let update_result = update_fn.call(this)
+        TimerDialogDisplay(this.dialg, update_result.display)
+        TimerDialogSetTitle(this.dialg, update_result.name)
+
     ondestroy
         t.release()
+        if this.update_fn != null
+            TimerDialogDisplay(this.dialg, false)
+            DestroyTimerDialog(this.dialg)
+            destroy this.update_fn
+
 
 public tuple dialog_update_fn_res(string name, bool display)
 public abstract class PeriodicDialogUpdateFn
@@ -172,7 +189,9 @@ public abstract class CallbackCounted
         if this.update_fn != null
             TimerDialogDisplay(this.dialg, false)
             DestroyTimerDialog(this.dialg)
+            this.dialg = null
             destroy this.update_fn
+            this.update_fn = null
 
 
 var x = 200

@@ -45,23 +45,23 @@ public class UnitProps
 
 public constant SHIP_PROPS = new HashList<UnitProps>()..add(
     new UnitProps('wv00', Units.orcishTransportShip,    Icons.bTNOrcishTransport,       ArmorType.Large,     "Dinghy", .4, false, false),
-    new UnitProps('wv01', Units.humanTransportShip1,    Icons.bTNHumanTransport,        ArmorType.Medium,    "Sailor", .4, false, true),
-    new UnitProps('wv02', Units.humanDestroyerShip1,    Icons.bTNHumanDestroyer,        ArmorType.Small,     "Interceptor"),
+    new UnitProps('wv01', Units.humanTransportShip1,    Icons.bTNHumanTransport,        ArmorType.Medium,    "Sailor"),
+    new UnitProps('wv02', Units.humanDestroyerShip1,    Icons.bTNHumanDestroyer,        ArmorType.Small,     "Interceptor", .5, false, true),
     new UnitProps('wv03', Units.nightElfTransportShip1, Icons.bTNNightElfTransport,     ArmorType.Unarmored, "Crusader"),
     new UnitProps('wv04', Units.orcishDestroyerShip1,   Icons.bTNOrcDestroyer,          ArmorType.Fortified, "Sea Punisher", .7, true, false),
     new UnitProps('wv05', Units.undeadDestroyerShip1,   Icons.bTNUndeadDestroyer,       ArmorType.Medium,    "Destroyer"),
-    new UnitProps('wv06', Units.nightElfBattleship,     Icons.bTNNightElfBattleCruiser, ArmorType.Fortified, "Dominator", .6, false, true),
-    new UnitProps('wv07', Units.orcJuggernaught,        Icons.bTNJuggernaut,            ArmorType.Large,     "Juggernaught"),
+    new UnitProps('wv06', Units.nightElfBattleship,     Icons.bTNNightElfBattleCruiser, ArmorType.Fortified, "Dominator", .6, false, false),
+    new UnitProps('wv07', Units.orcJuggernaught,        Icons.bTNJuggernaut,            ArmorType.Large,     "Juggernaught", .5, false, true),
     new UnitProps('wv08', Units.undeadShipBattleShip,   Icons.bTNUndeadBattleShip,      ArmorType.Medium,    "Overlord"),
     new UnitProps('wv09', Units.undeadTransportShip1,   Icons.bTNUndeadTransport,       ArmorType.Small,     "Ghost ship", .7, true, false),
     new UnitProps('wv10', Units.nightElfFishingBoat,    Icons.bTNNightElfFishingBoat,   ArmorType.Unarmored, "Fishing boat"),
-    new UnitProps('wv11', Units.nightElfDestroyerShip1, Icons.bTNNightElfDestroyer,     ArmorType.Large,     "Battleship", .5, false, true),
-    new UnitProps('wv12', Units.humanBattleship,        Icons.bTNHumanBattleShip,       ArmorType.Medium,    "Dreadnought"),
+    new UnitProps('wv11', Units.nightElfDestroyerShip1, Icons.bTNNightElfDestroyer,     ArmorType.Large,     "Battleship"),
+    new UnitProps('wv12', Units.humanBattleship,        Icons.bTNHumanBattleShip,       ArmorType.Medium,    "Dreadnought", .5, false, true),
     new UnitProps('wv13', Units.warWagon,               Icons.bTNSeigeEngine,           ArmorType.Fortified, "Tank"),
     new UnitProps('wv14', Units.bloodElfWagon,          Icons.bTNBloodElfSupplyWagon,   ArmorType.Unarmored, "Elven treasure wagon", .5, true, false),
     new UnitProps('wv15', Units.obsidianStatue1,        Icons.bTNObsidianStatue,        ArmorType.Small,     "Floating artifact"),
-    new UnitProps('wv16', Units.undeadAirBarge1,        Icons.bTNUndeadAirBarge,        ArmorType.Medium,    "Yamato",  .5, false, true),
-    new UnitProps('wv17', Units.wisp1,                  Icons.bTNWisp,                  ArmorType.Hero,      "Spirit", 1.,  false, false),
+    new UnitProps('wv16', Units.undeadAirBarge1,        Icons.bTNUndeadAirBarge,        ArmorType.Medium,    "Yamato"),
+    new UnitProps('wv17', Units.wisp1,                  Icons.bTNWisp,                  ArmorType.Hero,      "Spirit", 1.,  false, true),
     new UnitProps('wv18', Units.goblinZeppelin,         Icons.bTNGoblinZeppelin,        ArmorType.Small,     "Goblin warship", .75, false, false),
     new UnitProps('wv19', Units.orcishTransportShip,    Icons.bTNOrcishTransport,       ArmorType.Large,     "Agamemnon", .85, true, false)
 
@@ -90,7 +90,7 @@ class CollisionCircle extends AbilityDefinitionItemRegenManalesser
         super(id)
 
 class BaseShip extends UnitDefinition
-    construct(int id, real scale, int ss, int hp, int bounty, string name, string model, ArmorType armor_type, int armor_amt, bool _is_boss, bool is_night_round)
+    construct(int id, real scale, int ss, int hp, int bounty, string name, string model, ArmorType armor_type, int armor_amt, bool _is_boss, bool _is_night_round)
         super(id, 'hbot')
         setScalingValue(scale)
         setSpeedBase(ss)
@@ -99,6 +99,7 @@ class BaseShip extends UnitDefinition
         setUnitClassification("")
         setHitPointsMaximumBase(hp)
         setName(name)
+        setFoodCost(1)
         setGoldBountyAwardedBase(bounty - 1)
         setGoldBountyAwardedNumberofDice(1)
         setGoldBountyAwardedSidesperDie(1)
@@ -134,7 +135,8 @@ function get_hp(int wave, bool is_boss, bool is_night_round) returns int
     // 90 seemed too high.  85 seemed too high.  80 seemed too high.
     let base_hp = 2 * (75. * 1.15.pow(wave.toReal())).toInt()
 
-    let as_boss = is_boss ? (.8 * ROUND_COUNT * base_hp).toInt() : base_hp
+    // .8 seemed too high.
+    let as_boss = is_boss ? (.7 * ROUND_COUNT * base_hp).toInt() : base_hp
 
     let as_night_round = is_night_round ? (.9 * as_boss).toInt() : as_boss
 
@@ -167,7 +169,7 @@ class BaseDefender extends UnitDefinition
         setAttack1DamageBase(baseDamage)
         setNormalAbilities(commaList(ID_COLSN_CIRCLE))
         setSightRadiusDay(10000)
-        setSightRadiusNight(196)
+        setSightRadiusNight(256)
         setAttack1Range(range)
         setModelFile(model)
         setGoldCost(cost)
@@ -256,7 +258,7 @@ class BaseMeleeDefender extends UnitDefinition
         setAttack1DamageBase(baseDamage)
         setNormalAbilities(commaList(ID_COLSN_CIRCLE))
         setSightRadiusDay(10000)
-        setSightRadiusNight(196)
+        setSightRadiusNight(256)
         setAttack1Range(100)
         setHotkey(for_sale ? "" : "Q")
         setUpgradesUsed("")
@@ -316,7 +318,7 @@ class Barracks extends BuildingDefinition
         setFoodProduced(40)
         setUnitsTrained("")
         setSightRadiusDay(10000)
-        setSightRadiusNight(196)
+        setSightRadiusNight(256)
         setUnitsSold(
             commaList(
                 ID_DONOTHING_DEF,

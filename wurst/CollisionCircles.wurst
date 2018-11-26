@@ -2,7 +2,7 @@ package CollisionCircles
 
 import ClosureTimersFork
 import HashList
-import OnUnitEnterLeave
+import UnitIndexer
 import UI
 
 import UnitsApi
@@ -23,8 +23,8 @@ class UnitEffect
 
 let circles = new HashList<UnitEffect>()
 init
-    onEnter() ->
-        let u = getEnterLeaveUnit()
+    onUnitIndex() ->
+        let u = getIndexedUnit()
         if u.hasAbility(ID_COLSN_CIRCLE)
             let fx = addEffect(UI.selectioncircle, u.getPos())
                 ..setScale(1.4)

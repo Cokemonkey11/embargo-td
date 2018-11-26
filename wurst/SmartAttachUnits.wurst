@@ -17,7 +17,7 @@ init
         let order = GetIssuedOrderId()
         let target = GetOrderTargetUnit()
 
-        if order == ORDER_SMART and u.getPos().distanceToSq(target.getPos()) < MAX_DIST_SQ
+        if order == ORDER_SMART and u.getPos().distanceToSq(target.getPos()) < MAX_DIST_SQ and u.getOwner() == target.getOwner()
             u.issueImmediateOrder("stop")
             SelectUnitRemoveForPlayer(u, u.getOwner())
             nullTimer() ->

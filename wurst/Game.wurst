@@ -11,14 +11,18 @@ import GameTimer
 import HashList
 import HashMap
 import Icons
-import OnUnitEnterLeave
 import LinkedList
 import Quest
 import UnitsApi
+import UnitIndexer
 import Buildings
 
 constant SETUP_TIME = 20.  // 15 seemed too low?
-constant WAVE_DURATION = 65.  // 40 seemed too low?  45 too.  50 too.  55 too.  60 too.  Maybe fundamental problem - need to check lives remaining?
+
+// 40 seemed too low?  45 too.  50 too.  55 too.  60 too.  Maybe fundamental
+// problem - need to check lives remaining?  Going back to 60.
+constant WAVE_DURATION = 60.
+
 constant STARTING_GOLD = 300
 constant WAYPOINT_NOMINAL_RADIUS = 75.
 constant LOCAL_FLOAT_LOCALITY = 256. + 128.
@@ -30,7 +34,18 @@ constant LIVES = 30
 
 constant ORDER_HOLD_POSITION = "holdposition"
 
-var game_over = false
+var round = 0
+
+enum GameState
+    Init
+    AwaitingWave
+    Spawning
+    InRound
+    Lost
+    Victory
+
+var state = GameState.Init
+
 
 class Waypoints
     vec2 mid
@@ -194,6 +209,9 @@ class Team
             return this.b
         return this.a
 
+    function print(string msg)
+        printTimedToPlayer(msg, 30., this.a)
+        printTimedToPlayer(msg, 30., this.b)
 
     ondestroy
         this.spawn_point_a.destr()
@@ -214,8 +232,11 @@ class Team
     // Spawn a whole wave.
     function do_round_spawn(int whichRound)
         let props = SHIP_PROPS.get(whichRound)
+        state = GameState.Spawning
         if props != null
             doPeriodicallyCounted(SPAWN_INTERVAL, props.is_boss ? 1 : ROUND_COUNT) cb ->
+                if cb.isLast()
+                    state = GameState.InRound
                 if this.lives > 0
                     if this.a.isIngame()
                         this.creep.spawn_round(whichRound, this.a_waypoint, this.mid_waypoint, this.b_waypoint, this.b.isIngame(), props.is_night_round)
@@ -257,6 +278,69 @@ function playerLeaves(PlayerLeavesCallback cb)
         _playerLeavesCallback.call(GetTriggerPlayer())
     for i = 0 to 23
         t.registerPlayerEvent(Player(i), EVENT_PLAYER_LEAVE)
+
+
+function doWave()
+    state = GameState.AwaitingWave
+    let cb = doPeriodicallyCounted(WAVE_DURATION, 1) cb ->
+        if state != GameState.Lost and state != GameState.Victory
+            let props = SHIP_PROPS.get(round)
+            SetTimeOfDay(props.is_night_round ? 19. : 7.)
+            print("|cffffcc00Round " + round.toString() + ":|r " + props.name)
+
+            update_wave_board(SHIP_PROPS, round)
+
+            teams.forEach() team ->
+                team.hold_untouched_units()
+                team.do_round_spawn(round)
+
+    cb.setupDialogCallback() cb2 ->
+        var status = dialog_update_fn_res("Victory", false)
+        if cb2 != null
+            if round < SHIP_PROPS.size()
+                status = dialog_update_fn_res("Round " + round.toString(), true)
+
+        return status
+
+
+function checkNextState()
+    if not state == GameState.InRound
+        // Ignore this check.
+        return
+
+    // The next state commences when the last creep dies.
+    let creeps = teams.foldl(0) (team, accum) ->
+        return accum + team.creep.getCurrentSupply()
+
+    if not creeps == 0
+        // Ignore this check - await the next check.
+        return
+
+    if round == SHIP_PROPS.size() - 1
+        teams.filter(team -> team.lives > 0).forEach() team ->
+            print("Team " + team.a.getNameColored() + " & " + team.b.getNameColored() + " won the game!")
+        print("    |cff999999Game time: " + (getElapsedGameTime() / 60.).toInt().toString() + " minutes.|r")
+
+        doAfter(5.) ->
+            print("The game will end in 20 seconds.")
+            state = GameState.Victory
+            doAfter(20.) ->
+                // Destroy creep_track.
+                destroy creep_track
+
+                // End the game.
+                teams.forEach() team ->
+                    if team.lives > 0
+                        RemovePlayer(team.a, PLAYER_GAME_RESULT_VICTORY)
+                        RemovePlayer(team.b, PLAYER_GAME_RESULT_VICTORY)
+                    else
+                        RemovePlayer(team.a, PLAYER_GAME_RESULT_DEFEAT)
+                        RemovePlayer(team.b, PLAYER_GAME_RESULT_DEFEAT)
+                EndGame(true)
+    else
+        round++
+        doWave()
+
 
 tuple team_and_unit(Team team, unit fx)
 init
@@ -365,26 +449,28 @@ init
                             u.remove()
 
                     if all_teams_lost()
-                        game_over = true
+                        state = GameState.Lost
                         print("Everyone lost!  The game will end shortly.")
                         doAfter(20.) ->
                             EndGame(true)
                 else
                     printTimedToPlayer("Only " + team_blob.lives.toString() + " lives left!", 20., team_blob.a)
                     printTimedToPlayer("Only " + team_blob.lives.toString() + " lives left!", 20., team_blob.b)
-                creep_track.remove(GetTriggerUnit())
-                destroy waypoints
 
                 GetTriggerUnit().remove()
 
-    onLeave() ->
-        if creep_track.has(GetTriggerUnit())
+    onUnitDeindex() ->
+        let u = getDeindexedUnit()
+        if creep_track.has(u)
             // Destroy creep_track waypoints.
-            destroy creep_track.getAndRemove(GetTriggerUnit())
+            let wp = creep_track.getAndRemove(u)
+            destroy wp
+            checkNextState()
 
     SetTimeOfDay(7.)
     SetTimeOfDayScale(0.)
 
+    // Display indicators of where creeps go.
     teams.forEach() team ->
         let ship_a = createUnit(team.a, 'hbot', team.a_waypoint, team.a_waypoint.angleTo(team.mid_waypoint))
             ..addAbility('Aloc')
@@ -434,50 +520,10 @@ init
         doAfter(35.) ->
             print("Good luck!")
 
-        let cb = doPeriodicallyCounted(WAVE_DURATION, wave_count() + 1) cb ->
-            if game_over
-                cb.stop()
-            else
-                if not cb.isLast()
-                    let rd = round_from_cb_count(cb.getCount())
-                    let props = SHIP_PROPS.get(rd)
-                    SetTimeOfDay(props.is_night_round ? 19. : 7.)
-                    print("|cffffcc00Round " + rd.toString() + ":|r " + props.name)
+        // Let the first wave begin.
+        doWave()
 
-                    update_wave_board(SHIP_PROPS, rd)
-
-                    teams.forEach() team ->
-                        team.hold_untouched_units()
-                        team.do_round_spawn(rd)
-                else
-                    print("|cffffcc00You win!  Congratulations.|r")
-                    print("    |cff999999Game time: " + (getElapsedGameTime() / 60.).toInt().toString() + " minutes.|r")
-                    doAfter(20.) ->
-                        // Destroy creep_track.
-                        destroy creep_track
-
-                        // End the game.
-                        teams.forEach() team ->
-                            if team.lives > 0
-                                RemovePlayer(team.a, PLAYER_GAME_RESULT_VICTORY)
-                                RemovePlayer(team.b, PLAYER_GAME_RESULT_VICTORY)
-                            else
-                                RemovePlayer(team.a, PLAYER_GAME_RESULT_DEFEAT)
-                                RemovePlayer(team.b, PLAYER_GAME_RESULT_DEFEAT)
-                        EndGame(true)
-
-        cb.setupDialogCallback() cb2 ->
-            var status = dialog_update_fn_res("Victory", false)
-            if cb2 != null
-                let round = round_from_cb_count(cb2.getCount())
-
-                if round < SHIP_PROPS.size()
-                    status = dialog_update_fn_res("Round " + round.toString(), true)
-
-            return status
-
-
-    // Upgrade creep handler.
+    // Upgrade tower handler.
     CreateTrigger()..registerAnyUnitEvent(EVENT_PLAYER_UNIT_SELL)..addAction() ->
         if not GetSellingUnit().getTypeId() == ID_BARRACKS
             let pos = GetSellingUnit().getPos()
