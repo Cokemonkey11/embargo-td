@@ -135,8 +135,8 @@ function get_hp(int wave, bool is_boss, bool is_night_round) returns int
     // 90 seemed too high.  85 seemed too high.  80 seemed too high.
     let base_hp = 2 * (75. * 1.15.pow(wave.toReal())).toInt()
 
-    // .8 seemed too high.
-    let as_boss = is_boss ? (.7 * ROUND_COUNT * base_hp).toInt() : base_hp
+    // .8 seemed too high. .7 seemed too high.
+    let as_boss = is_boss ? (.65 * ROUND_COUNT * base_hp).toInt() : base_hp
 
     let as_night_round = is_night_round ? (.9 * as_boss).toInt() : as_boss
 

@@ -20,8 +20,9 @@ import Buildings
 constant SETUP_TIME = 20.  // 15 seemed too low?
 
 // 40 seemed too low?  45 too.  50 too.  55 too.  60 too.  Maybe fundamental
-// problem - need to check lives remaining?  Going back to 60.
-constant WAVE_DURATION = 60.
+// problem - need to check lives remaining?  Going back to 60.  Going back to
+// 55.
+constant WAVE_DURATION = 55.
 
 constant STARTING_GOLD = 300
 constant WAYPOINT_NOMINAL_RADIUS = 75.
@@ -439,7 +440,7 @@ init
                 addEffect(Abilities.massTeleportTarget, GetTriggerUnit().getPos()).destr()
                 team_blob.lives--
                 if team_blob.lives <= 0
-                    print("Team " + team_blob.a.getName() + " & " + team_blob.b.getName() + " was defeated!")
+                    print("Team " + team_blob.a.getNameColored() + " & " + team_blob.b.getNameColored() + " was defeated!")
                     nullTimer() ->
                         forUnitsOfPlayer(team_blob.a) u ->
                             u.remove()
@@ -450,7 +451,7 @@ init
 
                     if all_teams_lost()
                         state = GameState.Lost
-                        print("Everyone lost!  The game will end shortly.")
+                        print("|cffffcc00Everyone lost!|r  The game will end shortly.")
                         doAfter(20.) ->
                             EndGame(true)
                 else
@@ -469,6 +470,10 @@ init
 
     SetTimeOfDay(7.)
     SetTimeOfDayScale(0.)
+
+    // Enable map-wide vision for creeps.
+    teams.forEach() team ->
+        CreateFogModifierRect(team.creep, FOG_OF_WAR_VISIBLE, bj_mapInitialPlayableArea, false, true)
 
     // Display indicators of where creeps go.
     teams.forEach() team ->

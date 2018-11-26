@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 - Nothing yet.
 
+## [0.2.2] - 2018-11-26
+### Changed
+- Attempt to fix creep-attacking issue by adding map-wide visibility for creeps.
+- Reduce boss hit points from 700% to 650%.
+- Time between waves reduced back down to 55.
+
 ## [0.2.1] - 2018-11-26
 ### Changed
 - Adjusted night rounds to not start from the 1th round.
