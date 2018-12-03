@@ -41,7 +41,7 @@ init
         while iters.hasNext()
             let fx_pair = iters.next()
             if fx_pair.u.getTypeId() != 0 and fx_pair.u.isAlive()
-                fx_pair.fx.setPos(fx_pair.u.getPos())
+                fx_pair.fx..setPos(fx_pair.u.getPos())..setHeight(-50.)
             else
                 circles.remove(fx_pair)
                 destroy fx_pair
