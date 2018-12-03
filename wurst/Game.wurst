@@ -22,7 +22,7 @@ constant SETUP_TIME = 20.  // 15 seemed too low?
 // 40 seemed too low?  45 too.  50 too.  55 too.  60 too.  Maybe fundamental
 // problem - need to check lives remaining?  Going back to 60.  Going back to
 // 55.
-constant WAVE_DURATION = 55.
+constant PREROUND_DURATION = 50.
 
 constant STARTING_GOLD = 300
 constant WAYPOINT_NOMINAL_RADIUS = 75.
@@ -283,7 +283,7 @@ function playerLeaves(PlayerLeavesCallback cb)
 
 function doWave()
     state = GameState.AwaitingWave
-    let cb = doPeriodicallyCounted(WAVE_DURATION, 1) cb ->
+    let cb = doPeriodicallyCounted(PREROUND_DURATION, 1) cb ->
         if state != GameState.Lost and state != GameState.Victory
             let props = SHIP_PROPS.get(round)
             SetTimeOfDay(props.is_night_round ? 19. : 7.)

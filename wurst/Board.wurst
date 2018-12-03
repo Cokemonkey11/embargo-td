@@ -8,8 +8,11 @@ import UnitObjEditing
 
 
 constant WIDTH_CARETS = .02
-constant WIDTH_NORMAL = .09
-constant WIDTH_ARMOR  = .06
+
+// .09 too narrow for "Floating artifact" and "Goblin warship".
+constant WIDTH_NORMAL = .1
+
+constant WIDTH_ARMOR  = .07  // .06 too narrow for "Unarmored".
 constant WIDTH_INFO   = .06
 
 let wave_board = CreateMultiboard()
