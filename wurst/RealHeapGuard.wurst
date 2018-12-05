@@ -1,0 +1,188 @@
+package RealHeapGuard
+
+import ClosureTimers
+import LinkedList
+
+///
+/// Implements a max-priority-queue that must be locked for use.
+///
+
+real array _heap
+int max_index = -1
+
+public tuple maybe_node_children(int count, int a, int b)
+public tuple maybe_node_parent(bool have, int idx)
+
+public abstract class NodeChildrenAnyPred
+    protected abstract function call(int idx) returns bool
+
+public abstract class NodeParentAndThen
+    protected abstract function call(int idx) returns bool
+
+public function maybe_node_children.any(NodeChildrenAnyPred pred) returns bool
+    if this.count > 0
+        if pred.call(this.a)
+            return true
+        if this.count > 1
+            if pred.call(this.b)
+                return true
+    return false
+
+public function maybe_node_children.max_idx() returns int
+    if this.count > 0
+        if this.count > 1
+            return max(this.a, this.b)
+        return this.a
+    return -1
+
+public function maybe_node_parent.and_then(NodeParentAndThen pred) returns bool
+    if this.have
+        return pred.call(this.idx)
+    return false
+
+function int._heap_children() returns maybe_node_children
+    // 0 -> 1, 2
+    // 1 -> 3, 4
+    // 2 -> 5, 6
+    // 3 -> 7, 8
+    // 4 -> 9, 10
+    // 5 -> 11, 12
+    let nominal_1 = 2 * this + 1
+    let nominal_2 = 2 * this + 2
+    var count = 0
+    if nominal_1 <= max_index
+        count++
+
+        if nominal_2 <= max_index
+            count++
+
+    return maybe_node_children(count, nominal_1, nominal_2)
+
+function int._heap_parent() returns maybe_node_parent
+    // 12 -> 5
+    // 11 -> 5
+    // 10 -> 4
+    //  9 -> 4
+    //  8 -> 3
+    //  7 -> 3
+    //  6 -> 2
+    if this == 0
+        return maybe_node_parent(false, 0)
+    if this % 2 == 1
+        return maybe_node_parent(true, (this / 2.0).toInt())
+    return maybe_node_parent(true, (this / 2.).toInt() - 1)
+
+
+public tuple maybe_real(bool have, real val)
+
+function _push_heap(real val)
+    max_index++
+    _heap[max_index] = val
+
+    // Re-sort.
+    var this_idx = max_index
+    while (this_idx._heap_parent().and_then(parent_idx -> _heap[parent_idx] < _heap[this_idx]))
+        let new_idx = this_idx._heap_parent().idx
+        _heap_swap(this_idx, new_idx)
+        this_idx = new_idx
+
+function _heap_swap(int idx_a, int idx_b)
+    let temp = _heap[idx_a]
+    _heap[idx_a] = _heap[idx_b]
+    _heap[idx_b] = temp
+
+function _pop_heap() returns maybe_real
+    if max_index == -1
+        return maybe_real(false, 0.)
+    let ret = _heap[0]
+    _heap[0] = _heap[max_index]
+    max_index--
+
+    // Re-sort.
+    var this_idx = 0
+    while (this_idx._heap_children().any(child_idx -> _heap[child_idx] > _heap[this_idx]))
+        let new_idx = this_idx._heap_children().max_idx()
+        _heap_swap(new_idx, this_idx)
+        this_idx = new_idx
+
+    return maybe_real(true, ret)
+
+function _release_heap()
+    max_index = -1
+
+let _heap_queue = new LinkedList<int>()
+var nonce = 0
+
+public abstract class WithRealHeapGuard
+    protected abstract function call(RealHeapGuard heap)
+
+class RealHeapGuard
+    private int _nonce
+    private WithRealHeapGuard cb
+
+    construct(WithRealHeapGuard callback)
+        nonce++
+        this.cb = callback
+        _nonce = nonce
+        _release_heap()
+        _heap_queue.push(_nonce)
+        doPeriodically(ANIMATION_PERIOD) cb ->
+            if _heap_queue.getFirst() == _nonce
+                destroy cb
+                callback.call(this)
+
+    function pop() returns maybe_real
+        return _pop_heap()
+
+    function push(real val)
+        _push_heap(val)
+
+    ondestroy
+        destroy this.cb
+        _heap_queue.dequeue()
+
+@test function halfRealAsInts()
+    assertTrue(3.5.toInt() == 3)
+    assertTrue(3.6.toInt() == 3)
+    assertTrue(3.4.toInt() == 3)
+    assertTrue(3.499999.toInt() == 3)
+
+@test function heapParentWorks()
+    assertTrue(12 ._heap_parent().idx == 5)
+    assertTrue(11 ._heap_parent().idx == 5)
+    assertTrue(10 ._heap_parent().idx == 4)
+    assertTrue( 9 ._heap_parent().idx == 4)
+    assertTrue( 8 ._heap_parent().idx == 3)
+    assertTrue( 7 ._heap_parent().idx == 3)
+    assertTrue( 6 ._heap_parent().idx == 2)
+
+    assertTrue( 0 ._heap_parent().have == false)
+
+@test function heapChildrenWorks()
+    assertTrue(0 ._heap_children().a == 1)
+    assertTrue(1 ._heap_children().b == 4)
+    assertTrue(2 ._heap_children().a == 5)
+    assertTrue(3 ._heap_children().b == 8)
+    assertTrue(4 ._heap_children().a == 9)
+    assertTrue(5 ._heap_children().b == 12)
+
+init
+    new RealHeapGuard() guard ->
+        guard.push(3.)
+        guard.push(9.)
+        guard.push(4.)
+        guard.push(12.)
+        guard.push(5.)
+        guard.push(16.)
+        guard.push(5.)
+        guard.push(5.)
+        guard.push(99.)
+        guard.push(1.)
+        guard.push(7.)
+
+        while true
+            let res = guard.pop()
+            if res.have
+                print(res.val)
+            else
+                break

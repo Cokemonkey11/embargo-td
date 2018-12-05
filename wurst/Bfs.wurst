@@ -1,0 +1,182 @@
+package Bfs
+
+import Abilities
+import ClosureTimers
+import GameTimer
+import LinkedComparisonHashMap
+import LinkedList
+import TerrainUtils
+
+
+public tuple smallvec_vec2_4(vec2 a, vec2 b, vec2 c, vec2 d)
+
+public abstract class Smallvec_vec2_4_pred
+    protected abstract function call(vec2 test) returns bool
+
+public abstract class Smallvec_vec2_4_fn
+    protected abstract function call(vec2 val)
+
+public function smallvec_vec2_4.any(Smallvec_vec2_4_pred pred) returns bool
+    let a_check = pred.call(this.a)
+    let b_check = pred.call(this.b)
+    let c_check = pred.call(this.c)
+    let d_check = pred.call(this.d)
+
+    destroy pred
+    return a_check or b_check or c_check or d_check
+
+public function smallvec_vec2_4.each(Smallvec_vec2_4_fn fn)
+    fn.call(this.a)
+    fn.call(this.b)
+    fn.call(this.c)
+    fn.call(this.d)
+
+public tuple astar_res(Bfs parent, bool succ, real duration)
+
+public abstract class BfsPredicate
+    protected abstract function call(vec2 test) returns bool
+
+public abstract class BfsNeighbors
+    protected abstract function call(vec2 test) returns smallvec_vec2_4
+
+public abstract class BfsFuture
+    protected abstract function call(astar_res res)
+
+public tuple option_int(bool have, int val)
+function option_int.get_or(int def) returns int
+    if this.have
+        return this.val
+
+    return def
+
+class Vec2Wrap implements Hashable
+    vec2 t
+
+    construct(vec2 t)
+        this.t = t
+
+    override function hash() returns string
+        return "Vec2Wrap" + this.t.toString()
+
+function vec2.manhattan_to(vec2 rhs) returns real
+    return (this.x - rhs.x).abs() + (this.y - rhs.y).abs()
+
+public function vec2.has_path_to(BfsPredicate success_goal_criteria, BfsNeighbors neighbor_fn, option_int maybe_limit, BfsPredicate is_pathable_fn, BfsFuture fut)
+    new Bfs(this, neighbor_fn, is_pathable_fn, maybe_limit, success_goal_criteria)
+        ..evaluate_by_null_timers() res ->
+            fut.call(res)
+            destroy res.parent
+
+
+var duplicates_count = 0
+class Bfs
+    vec2 start
+    BfsPredicate evaluate
+    BfsPredicate success_criteria
+    BfsNeighbors neighbor_fn
+    option_int maybe_limit
+
+    real start_ts
+
+    LinkedList<Vec2Wrap> frontier
+
+    LinkedComparisonHashMap<bool> passed
+
+    construct(vec2 start, BfsNeighbors neighbor_fn, BfsPredicate evaluate, option_int maybe_limit, BfsPredicate success_criteria)
+        this.start = start
+        this.evaluate = evaluate
+        this.maybe_limit = maybe_limit
+        this.neighbor_fn = neighbor_fn
+        this.success_criteria = success_criteria
+
+        this.frontier = new LinkedList<Vec2Wrap>()
+        this.passed = new LinkedComparisonHashMap<bool>()
+
+    ondestroy
+        this.frontier.forEach() v ->
+            destroy v
+        destroy this.frontier
+
+        destroy this.success_criteria
+        destroy this.evaluate
+
+        let i = this.passed.iterator()
+        while i.hasNext()
+            let v = i.next()
+            destroy v
+        i.close()
+        destroy this.passed
+
+    private function _propagate(BfsFuture fut)
+        let iter = this.frontier.iterator()
+        var cnt = 0
+        while iter.hasNext() and cnt < 10
+            let itm = iter.next()
+            cnt++
+
+            if this.success_criteria.call(itm.t)
+                fut.call(astar_res(this, true, getElapsedGameTime() - this.start_ts))
+                return
+
+            if this.evaluate.call(itm.t)
+                this.neighbor_fn.call(itm.t).each() pair ->
+                    let wrapped = new Vec2Wrap(pair)
+                    if not this.passed.has(wrapped)
+                        this.frontier.add(wrapped)
+                        this.passed.putOrForgetOldAndDestroyNewKey(wrapped, true)
+                    else
+                        destroy wrapped
+
+            iter.remove()
+
+        if not this.frontier.isEmpty()
+            // nullTimer() ->
+            doAfter(ANIMATION_PERIOD) ->
+                _propagate(fut)
+        else
+            fut.call(astar_res(this, false, getElapsedGameTime() - this.start_ts))
+            destroy fut
+        iter.close()
+
+    function evaluate_by_null_timers(BfsFuture fut)
+        this.start_ts = getElapsedGameTime()
+        this.frontier.add(new Vec2Wrap(this.start))
+
+        _propagate(fut)
+
+init
+    FogEnable(false)
+    FogMaskEnable(false)
+
+    doAfter(5.) ->
+        vec2(
+            0.,
+            -520.
+        // Is there a pathway from this node to the goal?
+        ).has_path_to(
+            // Define the goal as closeness to a particular other vec2.
+            (test) -> begin
+                let dist = test.manhattan_to(vec2(0., -1024.))
+                return dist < (16. + 16.)
+            end,
+            // Each iteration checks neighbors in 4 nearby quadrants.
+            (neighbor) -> begin
+                return smallvec_vec2_4(
+                    neighbor + vec2(  0.,  16.),
+                    neighbor + vec2(-16.,   0.),
+                    neighbor + vec2(  0., -16.),
+                    neighbor + vec2( 16.,   0.)
+                )
+            end,
+            // The check never times out.
+            option_int(false, 0),
+            // At each step, pathing is determined by walkable and floatable.
+            (test) -> begin
+                // Add an effect for debugging.
+                addEffect(Abilities.witchDoctorMissile, test).setScale(.5)
+                let suc = test.isTerrainWalkable() and not test.isTerrainPathable(PATHING_TYPE_FLOATABILITY)
+                return suc
+            end
+        ) res ->
+            // Finished searching.  Print the result.
+            print("test1 " + res.succ.toString() + " in " + res.duration.toString() + "s")
