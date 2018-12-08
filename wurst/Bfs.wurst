@@ -4,7 +4,7 @@ import Abilities
 import ClosureTimers
 import GameTimer
 import LinkedComparisonHashMap
-import LinkedList
+import RealHeapGuard
 import TerrainUtils
 
 
@@ -15,6 +15,9 @@ public abstract class Smallvec_vec2_4_pred
 
 public abstract class Smallvec_vec2_4_fn
     protected abstract function call(vec2 val)
+
+public abstract class AstarHeuristicFn
+    protected abstract function call(vec2 test, int cost, BfsPredicate success_criteria_fn) returns real
 
 public function smallvec_vec2_4.any(Smallvec_vec2_4_pred pred) returns bool
     let a_check = pred.call(this.a)
@@ -51,9 +54,11 @@ function option_int.get_or(int def) returns int
 
 class Vec2Wrap implements Hashable
     vec2 t
+    int cost
 
-    construct(vec2 t)
+    construct(vec2 t, int cost)
         this.t = t
+        this.cost = cost
 
     override function hash() returns string
         return "Vec2Wrap" + this.t.toString()
@@ -61,8 +66,8 @@ class Vec2Wrap implements Hashable
 function vec2.manhattan_to(vec2 rhs) returns real
     return (this.x - rhs.x).abs() + (this.y - rhs.y).abs()
 
-public function vec2.has_path_to(BfsPredicate success_goal_criteria, BfsNeighbors neighbor_fn, option_int maybe_limit, BfsPredicate is_pathable_fn, BfsFuture fut)
-    new Bfs(this, neighbor_fn, is_pathable_fn, maybe_limit, success_goal_criteria)
+public function vec2.has_path_to(BfsPredicate success_goal_criteria, BfsNeighbors neighbor_fn, AstarHeuristicFn heuristic_fn, option_int maybe_limit, BfsPredicate is_pathable_fn, BfsFuture fut)
+    new Bfs(this, neighbor_fn, heuristic_fn, is_pathable_fn, maybe_limit, success_goal_criteria)
         ..evaluate_by_null_timers() res ->
             fut.call(res)
             destroy res.parent
@@ -71,6 +76,7 @@ public function vec2.has_path_to(BfsPredicate success_goal_criteria, BfsNeighbor
 var duplicates_count = 0
 class Bfs
     vec2 start
+    AstarHeuristicFn heuristic_fn
     BfsPredicate evaluate
     BfsPredicate success_criteria
     BfsNeighbors neighbor_fn
@@ -78,23 +84,24 @@ class Bfs
 
     real start_ts
 
-    LinkedList<Vec2Wrap> frontier
+    // LinkedList<Vec2Wrap> frontier
+    RealHeapGuard<Vec2Wrap> frontier
 
     LinkedComparisonHashMap<bool> passed
 
-    construct(vec2 start, BfsNeighbors neighbor_fn, BfsPredicate evaluate, option_int maybe_limit, BfsPredicate success_criteria)
+    construct(vec2 start, BfsNeighbors neighbor_fn, AstarHeuristicFn heuristic_fn, BfsPredicate evaluate, option_int maybe_limit, BfsPredicate success_criteria)
         this.start = start
         this.evaluate = evaluate
+        this.heuristic_fn = heuristic_fn
         this.maybe_limit = maybe_limit
         this.neighbor_fn = neighbor_fn
         this.success_criteria = success_criteria
 
-        this.frontier = new LinkedList<Vec2Wrap>()
         this.passed = new LinkedComparisonHashMap<bool>()
 
     ondestroy
-        this.frontier.forEach() v ->
-            destroy v
+        while not this.frontier.is_empty()
+            destroy this.frontier.pop()
         destroy this.frontier
 
         destroy this.success_criteria
@@ -108,10 +115,9 @@ class Bfs
         destroy this.passed
 
     private function _propagate(BfsFuture fut)
-        let iter = this.frontier.iterator()
         var cnt = 0
-        while iter.hasNext() and cnt < 10
-            let itm = iter.next()
+        while (not this.frontier.is_empty()) and cnt < 10
+            let itm = this.frontier.pop()
             cnt++
 
             if this.success_criteria.call(itm.t)
@@ -120,29 +126,28 @@ class Bfs
 
             if this.evaluate.call(itm.t)
                 this.neighbor_fn.call(itm.t).each() pair ->
-                    let wrapped = new Vec2Wrap(pair)
+                    let wrapped = new Vec2Wrap(pair, itm.cost + 1)
                     if not this.passed.has(wrapped)
-                        this.frontier.add(wrapped)
+                        this.frontier.push(this.heuristic_fn.call(itm.t, itm.cost, this.success_criteria), wrapped)
                         this.passed.putOrForgetOldAndDestroyNewKey(wrapped, true)
                     else
                         destroy wrapped
 
-            iter.remove()
-
-        if not this.frontier.isEmpty()
+        if not this.frontier.is_empty()
             // nullTimer() ->
             doAfter(ANIMATION_PERIOD) ->
                 _propagate(fut)
         else
             fut.call(astar_res(this, false, getElapsedGameTime() - this.start_ts))
             destroy fut
-        iter.close()
 
     function evaluate_by_null_timers(BfsFuture fut)
         this.start_ts = getElapsedGameTime()
-        this.frontier.add(new Vec2Wrap(this.start))
+        new RealHeapGuard<Vec2Wrap>() guard ->
+            this.frontier = guard
+            guard.push(this.heuristic_fn.call(this.start, 0, this.success_criteria), new Vec2Wrap(this.start, 0))
 
-        _propagate(fut)
+            _propagate(fut)
 
 init
     FogEnable(false)
@@ -150,7 +155,7 @@ init
 
     doAfter(5.) ->
         vec2(
-            0.,
+               0.,
             -520.
         // Is there a pathway from this node to the goal?
         ).has_path_to(
@@ -167,6 +172,12 @@ init
                     neighbor + vec2(  0., -16.),
                     neighbor + vec2( 16.,   0.)
                 )
+            end,
+            // The heuristic function f is a fraction of the cost g, plus the
+            // inverse manhattan distance to the goal h.
+            (itm, cost, succ_criteria) -> begin
+                let dist = itm.manhattan_to(vec2(0., -1024.))
+                return 1. / dist
             end,
             // The check never times out.
             option_int(false, 0),
