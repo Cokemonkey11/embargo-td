@@ -4,7 +4,10 @@ import ClosureTimers
 import LinkedList
 
 ///
-/// Implements a max-priority-queue that must be locked for use.
+/// Implements a max-priority-queue over a binary heap singleton that must be
+/// locked for use.
+///
+/// The heap is nominally a single `real array`.
 ///
 
 real array _heap
@@ -23,10 +26,13 @@ public abstract class NodeParentAndThen
 public function maybe_node_children.any(NodeChildrenAnyPred pred) returns bool
     if this.count > 0
         if pred.call(this.a)
+            destroy pred
             return true
         if this.count > 1
             if pred.call(this.b)
+                destroy pred
                 return true
+    destroy pred
     return false
 
 public function maybe_node_children.max_idx() returns int
@@ -38,9 +44,9 @@ public function maybe_node_children.max_idx() returns int
         return this.a
     return -1
 
-public function maybe_node_parent.and_then(NodeParentAndThen pred) returns bool
+public function maybe_node_parent.and_then_heap_less_than_other_idx(int other_idx) returns bool
     if this.have
-        return pred.call(this.idx)
+        return (_heap[this.idx] < _heap[other_idx])
     return false
 
 function int._heap_children() returns maybe_node_children
@@ -72,8 +78,8 @@ function int._heap_parent() returns maybe_node_parent
     if this == 0
         return maybe_node_parent(false, 0)
     if this % 2 == 1
-        return maybe_node_parent(true, (this / 2.0).toInt())
-    return maybe_node_parent(true, (this / 2.).toInt() - 1)
+        return maybe_node_parent(true, this div 2)
+    return maybe_node_parent(true, (this div 2) - 1)
 
 
 public tuple maybe_real(bool have, real val)
@@ -86,7 +92,7 @@ function _push_heap(real val, int obj_idx)
 
     // Re-sort.
     var this_idx = max_index
-    while (this_idx._heap_parent().and_then(parent_idx -> _heap[parent_idx] < _heap[this_idx]))
+    while (this_idx._heap_parent().and_then_heap_less_than_other_idx(this_idx))
         let new_idx = this_idx._heap_parent().idx
         _heap_swap(this_idx, new_idx)
         this_idx = new_idx
