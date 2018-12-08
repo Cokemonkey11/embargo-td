@@ -8,6 +8,7 @@ import LinkedList
 ///
 
 real array _heap
+int array _obj_heap
 int max_index = -1
 
 public tuple maybe_node_children(int count, int a, int b)
@@ -31,7 +32,9 @@ public function maybe_node_children.any(NodeChildrenAnyPred pred) returns bool
 public function maybe_node_children.max_idx() returns int
     if this.count > 0
         if this.count > 1
-            return max(this.a, this.b)
+            if _heap[this.a] > _heap[this.b]
+                return this.a
+            return this.b
         return this.a
     return -1
 
@@ -74,10 +77,12 @@ function int._heap_parent() returns maybe_node_parent
 
 
 public tuple maybe_real(bool have, real val)
+public tuple maybe_real_and_obj_id(bool have, real val, int idx)
 
-function _push_heap(real val)
+function _push_heap(real val, int obj_idx)
     max_index++
     _heap[max_index] = val
+    _obj_heap[max_index] = obj_idx
 
     // Re-sort.
     var this_idx = max_index
@@ -88,14 +93,24 @@ function _push_heap(real val)
 
 function _heap_swap(int idx_a, int idx_b)
     let temp = _heap[idx_a]
+    let obj_temp = _obj_heap[idx_a]
     _heap[idx_a] = _heap[idx_b]
     _heap[idx_b] = temp
+    _obj_heap[idx_a] = _obj_heap[idx_b]
+    _obj_heap[idx_b] = obj_temp
 
-function _pop_heap() returns maybe_real
+function _peek_weight() returns maybe_real
     if max_index == -1
-        return maybe_real(false, 0.)
+        return maybe_real(false, 0)
+    return maybe_real(true, _heap[0])
+
+function _pop_heap() returns maybe_real_and_obj_id
+    if max_index == -1
+        return maybe_real_and_obj_id(false, 0., 0)
     let ret = _heap[0]
+    let obj_ret = _obj_heap[0]
     _heap[0] = _heap[max_index]
+    _obj_heap[0] = _obj_heap[max_index]
     max_index--
 
     // Re-sort.
@@ -105,7 +120,7 @@ function _pop_heap() returns maybe_real
         _heap_swap(new_idx, this_idx)
         this_idx = new_idx
 
-    return maybe_real(true, ret)
+    return maybe_real_and_obj_id(true, ret, obj_ret)
 
 function _release_heap()
     max_index = -1
@@ -113,14 +128,14 @@ function _release_heap()
 let _heap_queue = new LinkedList<int>()
 var nonce = 0
 
-public abstract class WithRealHeapGuard
-    protected abstract function call(RealHeapGuard heap)
+public abstract class WithRealHeapGuard<T>
+    protected abstract function call(RealHeapGuard<T> heap)
 
-class RealHeapGuard
+public class RealHeapGuard<T>
     private int _nonce
-    private WithRealHeapGuard cb
+    private WithRealHeapGuard<T> cb
 
-    construct(WithRealHeapGuard callback)
+    construct(WithRealHeapGuard<T> callback)
         nonce++
         this.cb = callback
         _nonce = nonce
@@ -131,11 +146,28 @@ class RealHeapGuard
                 destroy cb
                 callback.call(this)
 
-    function pop() returns maybe_real
-        return _pop_heap()
+    function peek_weight() returns maybe_real
+        return _peek_weight()
 
-    function push(real val)
-        _push_heap(val)
+    function pop() returns T
+        let res = _pop_heap()
+        if not res.have
+            return null
+        return res.idx castTo T
+
+    function is_empty() returns bool
+        return not _peek_weight().have
+
+    function push(real weight, T obj)
+        _push_heap(weight, obj castTo int)
+
+    function print_raw()
+        var res = "["
+        for i = 0 to max_index
+            res += _heap[i].toString()
+            res += " "
+        res += "]"
+        print(res)
 
     ondestroy
         destroy this.cb
@@ -166,23 +198,30 @@ class RealHeapGuard
     assertTrue(4 ._heap_children().a == 9)
     assertTrue(5 ._heap_children().b == 12)
 
-init
-    new RealHeapGuard() guard ->
-        guard.push(3.)
-        guard.push(9.)
-        guard.push(4.)
-        guard.push(12.)
-        guard.push(5.)
-        guard.push(16.)
-        guard.push(5.)
-        guard.push(5.)
-        guard.push(99.)
-        guard.push(1.)
-        guard.push(7.)
+// class TestClass
+//     string name
+//     construct(string name)
+//         this.name = name
 
-        while true
-            let res = guard.pop()
-            if res.have
-                print(res.val)
-            else
-                break
+// init
+//     new RealHeapGuard<TestClass>() guard ->
+//         guard.push(3., new TestClass("bob3"))
+//         guard.push(9., new TestClass("jan9"))
+//         guard.push(4., new TestClass("michael4"))
+//         guard.push(12., new TestClass("TOBY12"))
+//         guard.push(5., new TestClass("bob5"))
+//         guard.push(16., new TestClass("SCOTTIE16"))
+//         guard.push(5., new TestClass("bobb5"))
+//         guard.push(5., new TestClass("bobbb5"))
+//         guard.push(99., new TestClass("BLAKE 99"))
+//         guard.push(1., new TestClass("worm1"))
+//         guard.push(7., new TestClass("sam7"))
+
+//         guard.print_raw()
+
+//         while true
+//             let res = guard.pop()
+//             if not res == null
+//                 print(res.name)
+//             else
+//                 break
