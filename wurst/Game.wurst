@@ -1,32 +1,35 @@
 package Game
 
+import Assets
+import Astar
 import Board
 import ClosureForGroups
 import ClosureTimersFork
-import Abilities
-import DamageDetection
-import DamageType
 import EventHelper
 import GameTimer
 import HashList
 import HashMap
-import Icons
 import LinkedList
+import Lodash
 import Quest
+import RegisterEvents
+import StandardTextTags
+import TerrainUtils
 import UnitsApi
 import UnitIndexer
-import Buildings
+import WareditorWalkable
 
-constant SETUP_TIME = 20.  // 15 seemed too low?
+constant SETUP_TIME = 25.  // 15 seemed too low?  20 too low with new changes.
 
 // 40 seemed too low?  45 too.  50 too.  55 too.  60 too.  Maybe fundamental
 // problem - need to check lives remaining?  Going back to 60.  Going back to
-// 55.
-constant PREROUND_DURATION = 50.
+// 55.  Going back to 50.
+constant PREROUND_DURATION = 20.
 
 constant STARTING_GOLD = 300
 constant WAYPOINT_NOMINAL_RADIUS = 75.
 constant LOCAL_FLOAT_LOCALITY = 256. + 128.
+constant LOCAL_DEEP_LOCALITY = 1024. + 256.
 constant INNER_FLOAT_LOCALITY = 64. + 32.
 constant SPAWN_INTERVAL = 1.75  // Spawn during round after this period.  2 seemed too high?
 constant BUILDING_ANGLE = angle(3. * PI / 2.)
@@ -105,7 +108,13 @@ enum FindLocalFloatErr
     NONE
     NO_LOCAL_FLOAT
 
+enum FindLocalDeepErr
+    NONE
+    NO_LOCAL_DEEP
+
 tuple local_float_result(vec2 res, FindLocalFloatErr err)
+
+tuple local_deep_result(vec2 res, FindLocalDeepErr err)
 
 function vec2.is_shallow_water() returns bool
     return (
@@ -128,6 +137,20 @@ function vec2.find_local_float() returns local_float_result
                 return local_float_result(maybePoint, FindLocalFloatErr.NONE)
     return local_float_result(vec2(0., 0.), FindLocalFloatErr.NO_LOCAL_FLOAT)
 
+function vec2.find_local_deep() returns local_deep_result
+    for i = 0 to 15
+
+        // The point is suitable if its surrounding areas are all floatable.
+        let maybePoint = this.polarOffset(angle(2. * PI / 16 * i), LOCAL_DEEP_LOCALITY)
+        if maybePoint.isTerrainDeepWater()
+            return local_deep_result(maybePoint, FindLocalDeepErr.NONE)
+
+        let maybePoint2 = this.polarOffset(angle(2. * PI / 16 * i), LOCAL_DEEP_LOCALITY / 2.)
+        if maybePoint2.isTerrainDeepWater()
+            return local_deep_result(maybePoint2, FindLocalDeepErr.NONE)
+
+    return local_deep_result(vec2(0., 0.), FindLocalDeepErr.NO_LOCAL_DEEP)
+
 
 function vec2.remove_walkability()
     SetTerrainPathable(this.x, this.y, PATHING_TYPE_WALKABILITY, false)
@@ -136,6 +159,8 @@ class Team
     player a
     player b
     player creep
+    player a_surrogate
+    player b_surrogate
     vec2 a_start
     vec2 b_start
     vec2 mid
@@ -146,17 +171,29 @@ class Team
     vec2 b_waypoint
     vec2 mid_waypoint
 
+    vec2 a_deeppoint
+    vec2 b_deeppoint
+    vec2 mid_deeppoint
+
     effect spawn_point_a
     effect spawn_point_b
     effect midpoint_fx
 
-    construct(player a, player b, player creep)
+    construct(
+        player a,
+        player b,
+        player creep,
+        player a_surrogate,
+        player b_surrogate
+    )
         this.a = a
         this.b = b
         this.creep = creep
         this.a_start = a.getStartLocation()
         this.b_start = b.getStartLocation()
         this.mid = creep.getStartLocation()
+        this.a_surrogate = a_surrogate
+        this.b_surrogate = b_surrogate
 
         this.lives = a.isIngame() or b.isIngame() ? LIVES : 0
 
@@ -164,9 +201,38 @@ class Team
         let b_local_float_res = this.b_start.find_local_float()
         let mid_local_float_res = this.mid.find_local_float()
 
+        let a_local_deep_res = this.a_start.find_local_deep()
+        let b_local_deep_res = this.b_start.find_local_deep()
+        let mid_local_deep_res = this.mid.find_local_deep()
+
+        this.a.setPlayerAlliance(this.a_surrogate, ALLIANCE_PASSIVE,       true)
+        this.a.setPlayerAlliance(this.a_surrogate, ALLIANCE_SHARED_VISION, true)
+        this.a_surrogate.setPlayerAlliance(this.a, ALLIANCE_PASSIVE,       true)
+        this.a_surrogate.setPlayerAlliance(this.a, ALLIANCE_SHARED_VISION, true)
+        this.a.setPlayerAlliance(this.b_surrogate, ALLIANCE_PASSIVE,       true)
+        this.a.setPlayerAlliance(this.b_surrogate, ALLIANCE_SHARED_VISION, true)
+        this.b_surrogate.setPlayerAlliance(this.a, ALLIANCE_PASSIVE,       true)
+        this.b_surrogate.setPlayerAlliance(this.a, ALLIANCE_SHARED_VISION, true)
+
+        this.a_surrogate.setName(this.a.getName())
+        this.b_surrogate.setName(this.b.getName())
+
+        this.b.setPlayerAlliance(this.b_surrogate, ALLIANCE_PASSIVE,       true)
+        this.b.setPlayerAlliance(this.b_surrogate, ALLIANCE_SHARED_VISION, true)
+        this.b_surrogate.setPlayerAlliance(this.b, ALLIANCE_PASSIVE,       true)
+        this.b_surrogate.setPlayerAlliance(this.b, ALLIANCE_SHARED_VISION, true)
+        this.b.setPlayerAlliance(this.a_surrogate, ALLIANCE_PASSIVE,       true)
+        this.b.setPlayerAlliance(this.a_surrogate, ALLIANCE_SHARED_VISION, true)
+        this.a_surrogate.setPlayerAlliance(this.b, ALLIANCE_PASSIVE,       true)
+        this.a_surrogate.setPlayerAlliance(this.b, ALLIANCE_SHARED_VISION, true)
+
         this.a_waypoint = a_local_float_res.res
         this.b_waypoint = b_local_float_res.res
         this.mid_waypoint = mid_local_float_res.res
+
+        this.a_deeppoint = a_local_deep_res.res
+        this.b_deeppoint = b_local_deep_res.res
+        this.mid_deeppoint = mid_local_deep_res.res
 
         this.spawn_point_a = addEffect(Abilities.massTeleportTo, this.a_waypoint)
         this.spawn_point_b = addEffect(Abilities.massTeleportTo, this.b_waypoint)
@@ -181,28 +247,37 @@ class Team
         )
             print("Bad local float result! " + a.getId().toString() + " " + a.getNameColored())
 
+        if (a_local_deep_res.err != FindLocalDeepErr.NONE)
+            print("Bad local deep result! " + a.getId().toString() + " " + a.getNameColored())
+
+        if (b_local_deep_res.err != FindLocalDeepErr.NONE)
+            print("Bad local deep result! " + b.getId().toString() + " " + b.getNameColored())
+
+        if (mid_local_deep_res.err != FindLocalDeepErr.NONE)
+            print("Bad mid deep result! " + a.getNameColored() + " " + b.getNameColored())
+
         // Remove walkability from waypoints and spawn points.
-        nullTimer() ->
-            let count = (SPAWN_POINT_PATHING_WIDTH / 16.).toInt()
-            for i = 0 to count
-                for j = 0 to count
-                    (this.a_waypoint -
-                        vec2(16. * count / 2., 16 * count / 2.) +
-                        vec2(16. * i, 16. * j)).remove_walkability()
-        nullTimer() ->
-            let count = (SPAWN_POINT_PATHING_WIDTH / 16.).toInt()
-            for i = 0 to count
-                for j = 0 to count
-                    (this.b_waypoint -
-                        vec2(16. * count / 2., 16 * count / 2.) +
-                        vec2(16. * i, 16. * j)).remove_walkability()
-        nullTimer() ->
-            let count = (SPAWN_POINT_PATHING_WIDTH / 16.).toInt()
-            for i = 0 to count
-                for j = 0 to count
-                    (this.mid_waypoint -
-                        vec2(16. * count / 2., 16 * count / 2.) +
-                        vec2(16. * i, 16. * j)).remove_walkability()
+        // nullTimer() ->
+        //     let count = (SPAWN_POINT_PATHING_WIDTH / 16.).toInt()
+        //     for i = 0 to count
+        //         for j = 0 to count
+        //             (this.a_waypoint -
+        //                 vec2(16. * count / 2., 16 * count / 2.) +
+        //                 vec2(16. * i, 16. * j)).remove_walkability()
+        // nullTimer() ->
+        //     let count = (SPAWN_POINT_PATHING_WIDTH / 16.).toInt()
+        //     for i = 0 to count
+        //         for j = 0 to count
+        //             (this.b_waypoint -
+        //                 vec2(16. * count / 2., 16 * count / 2.) +
+        //                 vec2(16. * i, 16. * j)).remove_walkability()
+        // nullTimer() ->
+        //     let count = (SPAWN_POINT_PATHING_WIDTH / 16.).toInt()
+        //     for i = 0 to count
+        //         for j = 0 to count
+        //             (this.mid_waypoint -
+        //                 vec2(16. * count / 2., 16 * count / 2.) +
+        //                 vec2(16. * i, 16. * j)).remove_walkability()
 
 
     function get_other_player(player pl) returns player
@@ -214,21 +289,40 @@ class Team
         printTimedToPlayer(msg, 30., this.a)
         printTimedToPlayer(msg, 30., this.b)
 
+    function punish_units_at(vec2 where, real radius)
+        forUnitsInRange(where, radius) (unit u) ->
+            u.punish()
+
     ondestroy
         this.spawn_point_a.destr()
         this.spawn_point_b.destr()
         this.midpoint_fx.destr()
 
     // Hold all the unselected units.
-    function hold_untouched_units()
+    function hold_units()
         nullTimer() ->
             forUnitsOfPlayer(this.a) u ->
-                if not IsUnitSelected(u, this.a)
-                    u.issueImmediateOrder(ORDER_HOLD_POSITION)
+                u.issueImmediateOrder(ORDER_HOLD_POSITION)
+                u.setOwner(this.a_surrogate, false)
+                u.addEffect(Abilities.dispelMagicTarget, "origin").destr()
+                u.issueImmediateOrder(ORDER_HOLD_POSITION)
 
             forUnitsOfPlayer(this.b) u ->
-                if not IsUnitSelected(u, this.b)
-                    u.issueImmediateOrder(ORDER_HOLD_POSITION)
+                u.issueImmediateOrder(ORDER_HOLD_POSITION)
+                u.setOwner(this.b_surrogate, false)
+                u.addEffect(Abilities.dispelMagicTarget, "origin").destr()
+                u.issueImmediateOrder(ORDER_HOLD_POSITION)
+
+    function unhold_units()
+        // TODO play sound
+        nullTimer() ->
+            forUnitsOfPlayer(this.a_surrogate) u ->
+                u.setOwner(this.a, false)
+                u.removeAbility('Awan')
+
+            forUnitsOfPlayer(this.b_surrogate) u ->
+                u.setOwner(this.b, false)
+                u.removeAbility('Awan')
 
     // Spawn a whole wave.
     function do_round_spawn(int whichRound)
@@ -248,12 +342,12 @@ class Team
 function round_from_cb_count(int cb_count) returns int
     return (wave_count() + 1 - cb_count)
 
-let teams = new LinkedList<Team>()..add(
-    new Team(Player(0), Player(1), Player(8)),
-    new Team(Player(2), Player(3), Player(9)),
-    new Team(Player(4), Player(5), Player(10)),
-    new Team(Player(6), Player(7), Player(11))
-)
+let teams = ownList(new LinkedList<Team>()..add(
+    new Team(Player(0), Player(1), Player(8),  Player(12), Player(13)),
+    new Team(Player(2), Player(3), Player(9),  Player(14), Player(15)),
+    new Team(Player(4), Player(5), Player(10), Player(16), Player(17)),
+    new Team(Player(6), Player(7), Player(11), Player(18), Player(19))
+))
 
 
 function get_team_from_creep(unit u) returns Team
@@ -268,6 +362,26 @@ function get_team_from_player(player p) returns Team
 function all_teams_lost() returns bool
     return teams.filter((team) -> team.lives > 0).size() == 0
 
+function unit.punish()
+    this.issuePointOrder(
+        "move",
+        this.getPos().polarOffset(angle(GetRandomReal(0, 2. * bj_PI)), 64.)
+    )
+    doAfter(1.) ->
+        this.issueImmediateOrder("holdposition")
+
+function player.punish_units()
+    forUnitsOfPlayer(this) (unit u) ->
+        u.punish()
+
+    let team_or_null = find(teams, team -> begin
+        return team.a == this or team.b == this
+    end)
+
+    if not team_or_null == null
+        forUnitsOfPlayer((team_or_null.a == this ? team_or_null.a_surrogate : team_or_null.b_surrogate)) (unit u) ->
+            u.punish()
+
 
 abstract class PlayerLeavesCallback
     protected abstract function call(player which)
@@ -280,11 +394,110 @@ function playerLeaves(PlayerLeavesCallback cb)
     for i = 0 to 23
         t.registerPlayerEvent(Player(i), EVENT_PLAYER_LEAVE)
 
+function checkPathPred(vec2 node, vec2 goal, AstarFuture fut)
+    node.has_path_to(
+        // Define the goal as any nearby cell with deep water.
+        (test) -> begin
+            // print("test " + test.toString())
+            return smallvec_vec2_4(
+                test + vec2(  0.,  32.),
+                test + vec2(-32.,   0.),
+                test + vec2(  0., -32.),
+                test + vec2( 32.,   0.)
+            ).any() cell ->
+                return cell.isTerrainDeepWater() and cell.manhattan_to(node) > (96. + 96.)
+        end,
+        // Each iteration checks neighbors in 4 nearby quadrants.
+        (neighbor) -> begin
+            return smallvec_vec2_4(
+                neighbor + vec2(  0.,  16.),
+                neighbor + vec2(-16.,   0.),
+                neighbor + vec2(  0., -16.),
+                neighbor + vec2( 16.,   0.)
+            )
+        end,
+        // The heuristic function f is a fraction of the cost g, plus the
+        // inverse manhattan distance to the goal h.
+        (itm, cost, succ_criteria) -> begin
+            let dist = itm.manhattan_to(goal)
+            return 1. / dist
+        end,
+        // The check never times out.
+        option_int(false, 0),
+
+        // At each step, pathing is determined by floatable and walkable.
+        (test) -> begin
+            // Add an effect for debugging.
+            let fx = addEffect(Units.wisp1, test)..setScale(.5)
+            doAfter(1.) ->
+                fx.destr()
+            let suc = not test.isTerrainPathable(PATHING_TYPE_FLOATABILITY) and
+                test.isWalkableU()
+            return suc
+        end,
+        fut
+    )
+
+function checkPathPlayer(vec2 node, vec2 goal, player responsible)
+    printTimedToPlayer(
+        "Checking if your path blocks, " + responsible.getNameColored() + ".",
+        10.,
+        responsible
+    )
+    checkPathPred(node, goal, (astar_res res) -> begin
+        // Finished searching.  Print the result.
+        if not res.succ
+            printTimedToPlayer(
+                "|cffffcc00Warning,|r " +
+                    responsible.getNameColored() +
+                    ": you are blocking!  Offending units have been made to move.",
+                10.,
+                responsible
+            )
+            responsible.punish_units()
+    end)
+
+function checkPathTeamMidpointRegion(vec2 node, vec2 goal, Team responsible)
+    checkPathPred(node, goal, (astar_res res) -> begin
+        // Finished searching.  Print the result.
+        if not res.succ
+            printTimedToPlayer(
+                "|cffffcc00Warning,|r " +
+                    responsible.a.getNameColored() +
+                    ": you are blocking at your midpoint!  Offending units have been made to move.",
+                10.,
+                responsible.a
+            )
+            printTimedToPlayer(
+                "|cffffcc00Warning,|r " +
+                    responsible.b.getNameColored() +
+                    ": you are blocking at your midpoint!  Offending units have been made to move.",
+                10.,
+                responsible.b
+            )
+            responsible.punish_units_at(responsible.mid_waypoint, 500.)
+    end)
+
+function checkAllPaths()
+    teams.forEach() team ->
+        // Check path for A, B, and AB spawns as Node, and some nearby deep
+        // water as Goal.
+        checkPathPlayer(team.a_waypoint, team.a_deeppoint, team.a)
+        checkPathPlayer(team.b_waypoint, team.b_deeppoint, team.b)
+        checkPathTeamMidpointRegion(team.mid_waypoint, team.mid_deeppoint, team)
+        // TODO: Add for midpoint as well with two responsible players.
+        // checkPath(team.mid_waypoint, team.a, team.b)
 
 function doWave()
     state = GameState.AwaitingWave
+
+    // doAfter(PREROUND_DURATION - 10.) ->
+    //     checkAllPaths()
+
     let cb = doPeriodicallyCounted(PREROUND_DURATION, 1) cb ->
         if state != GameState.Lost and state != GameState.Victory
+            checkAllPaths()
+
             let props = SHIP_PROPS.get(round)
             SetTimeOfDay(props.is_night_round ? 19. : 7.)
             print("|cffffcc00Round " + round.toString() + ":|r " + props.name)
@@ -292,8 +505,10 @@ function doWave()
             update_wave_board(SHIP_PROPS, round)
 
             teams.forEach() team ->
-                team.hold_untouched_units()
-                team.do_round_spawn(round)
+                team.hold_units()
+
+                doAfter(3.) ->
+                    team.do_round_spawn(round)
 
     cb.setupDialogCallback() cb2 ->
         var status = dialog_update_fn_res("Victory", false)
@@ -318,6 +533,7 @@ function checkNextState()
         return
 
     if round == SHIP_PROPS.size() - 1
+        // Victory.
         teams.filter(team -> team.lives > 0).forEach() team ->
             print("Team " + team.a.getNameColored() + " & " + team.b.getNameColored() + " won the game!")
         print("    |cff999999Game time: " + (getElapsedGameTime() / 60.).toInt().toString() + " minutes.|r")
@@ -340,7 +556,25 @@ function checkNextState()
                 EndGame(true)
     else
         round++
+        SetTimeOfDay(7.)
+        teams.forEach() team ->
+            team.unhold_units()
         doWave()
+
+tuple maybe_player(bool have, player p)
+function unsurrogate(player p) returns maybe_player
+    // Find the matching team
+    let team_or_null = find(teams, (team) -> begin
+        return team.a_surrogate == p or team.b_surrogate == p
+    end)
+
+    if team_or_null == null
+        return maybe_player(false, null)
+
+    return maybe_player(
+        true,
+        team_or_null.a_surrogate == p ? team_or_null.a : team_or_null.b
+    )
 
 
 tuple team_and_unit(Team team, unit fx)
@@ -381,7 +615,8 @@ init
 
     // Setup bounty.
     teams.forEach() team ->
-        team.creep.setState(PLAYER_STATE_GIVES_BOUNTY, 1)
+        // Bounty is programmatic due to surrogates.
+        // team.creep.setState(PLAYER_STATE_GIVES_BOUNTY, 1)
 
         // This creep will attack its embargo team if blocked.
         team.creep.setPlayerAlliance(team.a, ALLIANCE_PASSIVE, false)
@@ -397,17 +632,19 @@ init
         nullTimer() ->
             teams.forEach() otherTeam ->
                 if otherTeam.a != team.a
-                    otherTeam.a.setPlayerAlliance(team.a, ALLIANCE_PASSIVE, true)
+                    otherTeam.a.setPlayerAlliance(team.a, ALLIANCE_PASSIVE,       true)
                     otherTeam.a.setPlayerAlliance(team.a, ALLIANCE_SHARED_VISION, true)
-                    otherTeam.a.setPlayerAlliance(team.b, ALLIANCE_PASSIVE, true)
+                    otherTeam.a.setPlayerAlliance(team.b, ALLIANCE_PASSIVE,       true)
                     otherTeam.a.setPlayerAlliance(team.b, ALLIANCE_SHARED_VISION, true)
-                    otherTeam.b.setPlayerAlliance(team.b, ALLIANCE_PASSIVE, true)
+                    otherTeam.b.setPlayerAlliance(team.b, ALLIANCE_PASSIVE,       true)
                     otherTeam.b.setPlayerAlliance(team.b, ALLIANCE_SHARED_VISION, true)
-                    otherTeam.b.setPlayerAlliance(team.a, ALLIANCE_PASSIVE, true)
+                    otherTeam.b.setPlayerAlliance(team.a, ALLIANCE_PASSIVE,       true)
                     otherTeam.b.setPlayerAlliance(team.a, ALLIANCE_SHARED_VISION, true)
 
     doAfter(480.) ->
-        print("Did you know?  This map was made with just 1004 lines of |cffffcc00WurstScript|r.")
+        print(
+            "Did you know?  This map was made with just 1500 lines of |cffffcc00WurstScript|r."
+        )
 
     // Player leave setup.
     playerLeaves() pl ->
@@ -461,7 +698,7 @@ init
                 GetTriggerUnit().remove()
 
     onUnitDeindex() ->
-        let u = getDeindexedUnit()
+        let u = getIndexingUnit()
         if creep_track.has(u)
             // Destroy creep_track waypoints.
             let wp = creep_track.getAndRemove(u)
@@ -546,11 +783,21 @@ init
 
 
     // Order attacking creeps to try moving again.
-    addOnDamageFunc() ->
-        let attacker = GetEventDamageSource()
-        if getDamageType() == DamageType.ATTACK and creep_track.has(attacker)
-            let waypoints = creep_track.get(attacker)
-            attacker.removeAbility('Aatk')
-            attacker.issuePointOrder("smart", waypoints.mid_visited ? waypoints.fin : waypoints.mid)
-            nullTimer() ->
-                attacker.issuePointOrder("smart", waypoints.mid_visited ? waypoints.fin : waypoints.mid)
+    // addOnDamageFunc() ->
+    //     let attacker = GetEventDamageSource()
+    //     if getDamageType() == DamageType.ATTACK and creep_track.has(attacker)
+    //         let waypoints = creep_track.get(attacker)
+    //         attacker.removeAbility('Aatk')
+    //         attacker.issuePointOrder("smart", waypoints.mid_visited ? waypoints.fin : waypoints.mid)
+    //         nullTimer() ->
+    //             attacker.issuePointOrder("smart", waypoints.mid_visited ? waypoints.fin : waypoints.mid)
+
+    registerPlayerUnitEvent(EVENT_PLAYER_UNIT_DEATH) ->
+        let creep = GetDyingUnit()
+        let creep_type = creep.getTypeId()
+        let bounty = bounties_map.has(creep_type) ? bounties_map.get(creep_type) : 0
+        let maybe_owner = unsurrogate(GetKillingUnit().getOwner())
+
+        if maybe_owner.have
+            maybe_owner.p.addGold(bounty)
+            createGoldBountyTextTag(creep, bounty, maybe_owner.p)

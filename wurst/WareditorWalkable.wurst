@@ -1,0 +1,140 @@
+/// Made by Wareditor with minor edits.
+package WareditorWalkable
+
+import NoWurst
+import _Handles
+import Basics
+import TerrainUtils
+import UnitObjEditing
+import ObjectIds
+import ObjectIdGenerator
+import MagicFunctions
+// import Annotations
+
+/*Pathability*/
+/** Fills 32x32 rect around vec2 with given pathing type */
+public function vec2.setPathable(pathingtype ttype, bool flag)
+    SetTerrainPathable(this.x, this.y, ttype, flag)
+
+public function vec2.isDeepWater() returns boolean
+    return not this.isTerrainPathable(PATHING_TYPE_FLOATABILITY) and this.isTerrainPathable(PATHING_TYPE_WALKABILITY)
+
+public function vec2.isShallowWater() returns boolean
+    return not this.isTerrainPathable(PATHING_TYPE_FLOATABILITY) and not this.isTerrainPathable(PATHING_TYPE_WALKABILITY) and this.isTerrainPathable(PATHING_TYPE_BUILDABILITY)
+
+public function vec2.isLand() returns boolean
+    return this.isTerrainPathable(PATHING_TYPE_FLOATABILITY)
+
+public function vec2.isPlatform() returns boolean
+    return not this.isTerrainPathable(PATHING_TYPE_FLOATABILITY) and not this.isTerrainPathable(PATHING_TYPE_WALKABILITY) and not this.isTerrainPathable(PATHING_TYPE_BUILDABILITY)
+
+/*Walkability, flyability and buildability*/
+constant MAX_RANGE_SQ = 10. .squared()
+constant DUMMY_ITEM_ID = 'wolg'
+let dummyItem = createItem(DUMMY_ITEM_ID, ZERO2)..setVisible(false)
+let itemSearchRect = Rect(0., 0., 128., 128.)
+item array hiddenItems
+int hiddenItemsCount = 0
+
+/** Returns the nearest walkable point*/
+public function vec2.findNearestWalkable() returns vec2
+    // Hide any items in the area to avoid conflicts with our item
+    itemSearchRect.moveTo(this)
+    EnumItemsInRect(itemSearchRect, null) ->
+    if GetEnumItem().isVisible()
+        hiddenItems[hiddenItemsCount] = GetEnumItem()
+        hiddenItems[hiddenItemsCount].setVisible(false)
+        hiddenItemsCount++
+
+    // Try to move the test item and get its coords
+    dummyItem.setPos(this) // Unhides the item
+    let pos = dummyItem.getPos()
+    dummyItem.setVisible(false) // Hide it again
+
+    // Unhide any items hidden at the start
+    while hiddenItemsCount > 0
+        hiddenItemsCount--
+        hiddenItems[hiddenItemsCount].setVisible(true)
+        hiddenItems[hiddenItemsCount] = null
+
+    return pos
+
+constant PATH_CHECKER   = compiletime(UNIT_ID_GEN.next())
+constant WALK_CHECKER   = compiletime(UNIT_ID_GEN.next())
+constant FLY_CHECKER    = compiletime(UNIT_ID_GEN.next())
+constant BUILD_CHECKER  = compiletime(UNIT_ID_GEN.next())
+
+function generateChecker(int i, int b) returns UnitDefinition
+    let u = new UnitDefinition(i, b)
+        ..setNormalAbilities("Aloc")
+        ..setCollisionSize(0.)
+        ..setCanFlee(false)
+        ..setFoodCost(0)
+        ..setGoldCost(0)
+        ..setLumberCost(0)
+        ..setPointValue(0)
+        ..setSightRadiusDay(0)
+        ..setSightRadiusNight(0)
+        ..setUpgradesUsed("")
+        ..setRace(Race.Unknown)
+
+        ..setIconGameInterface("")
+        ..setModelFile(".mdl")
+        ..setMaximumPitchAngledegrees(0.)
+        ..setMaximumRollAngledegrees(0.)
+        ..setAnimationBlendTimeseconds(0.)
+        ..setSelectionScale(0.)
+        ..setShadowImageUnit("")
+        ..setUnitSoundSet("")
+        ..setHideMinimapDisplay(true)
+
+        ..setCategorizationSpecial(true)
+    return u
+
+@compiletime function generateAssets()
+    generateChecker(PATH_CHECKER, 'hpea')
+        ..setStructuresBuilt(commaList(WALK_CHECKER,FLY_CHECKER,BUILD_CHECKER))
+    generateChecker(WALK_CHECKER, 'hfoo')
+    generateChecker(FLY_CHECKER, 'hgry')
+    generateChecker(BUILD_CHECKER, 'hhou')
+
+let pathChecker = CreateUnit(DUMMY_PLAYER, PATH_CHECKER, 0, 0, 0)
+/** Returns true if the point is buildable */
+public function vec2.isBuildable() returns bool
+    return IssueBuildOrderById(pathChecker, FLY_CHECKER, this.x, this.y)
+
+/** Returns true if the point is flyable */
+public function vec2.isFlyable() returns bool
+    return IssueBuildOrderById(pathChecker, FLY_CHECKER, this.x, this.y)
+
+public function vec2.isWalkableU() returns bool
+    return IssueBuildOrderById(pathChecker, WALK_CHECKER, this.x, this.y)
+
+/** Returns true if the point is walkable */
+public function vec2.isWalkable(boolean checkUnits) returns bool
+    if this.isTerrainPathable(PATHING_TYPE_WALKABILITY)
+        return false
+    if checkUnits and this.isWalkableU()
+    // Hide any items in the area to avoid conflicts with our item
+    itemSearchRect.moveTo(this)
+    EnumItemsInRect(itemSearchRect, null) ->
+    if GetEnumItem().isVisible()
+        hiddenItems[hiddenItemsCount] = GetEnumItem()
+        hiddenItems[hiddenItemsCount].setVisible(false)
+        hiddenItemsCount++
+
+    // Try to move the test item and get its coords
+    dummyItem.setPos(this) // Unhides the item
+    let pos = dummyItem.getPos()
+    dummyItem.setVisible(false) // Hide it again
+
+    // Unhide any items hidden at the start
+    while hiddenItemsCount > 0
+        hiddenItemsCount--
+        hiddenItems[hiddenItemsCount].setVisible(true)
+        hiddenItems[hiddenItemsCount] = null
+
+    return (pos.x - this.x) * (pos.x - this.x) + (pos.y-this.y) * (pos.y - this.y) <= MAX_RANGE_SQ
+
+public function vec2.isWalkable() returns bool
+    return this.isWalkable(false)

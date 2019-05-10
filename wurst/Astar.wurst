@@ -1,11 +1,9 @@
-package Bfs
+package Astar
 
-import Abilities
 import ClosureTimers
 import GameTimer
 import LinkedComparisonHashMap
 import RealHeapGuard
-import TerrainUtils
 
 
 public tuple smallvec_vec2_4(vec2 a, vec2 b, vec2 c, vec2 d)
@@ -17,7 +15,7 @@ public abstract class Smallvec_vec2_4_fn
     protected abstract function call(vec2 val)
 
 public abstract class AstarHeuristicFn
-    protected abstract function call(vec2 test, int cost, BfsPredicate success_criteria_fn) returns real
+    protected abstract function call(vec2 test, int cost, AstarPredicate success_criteria_fn) returns real
 
 public function smallvec_vec2_4.any(Smallvec_vec2_4_pred pred) returns bool
     let a_check = pred.call(this.a)
@@ -34,15 +32,15 @@ public function smallvec_vec2_4.each(Smallvec_vec2_4_fn fn)
     fn.call(this.c)
     fn.call(this.d)
 
-public tuple astar_res(Bfs parent, bool succ, real duration)
+public tuple astar_res(Astar parent, bool succ, real duration)
 
-public abstract class BfsPredicate
+public abstract class AstarPredicate
     protected abstract function call(vec2 test) returns bool
 
-public abstract class BfsNeighbors
+public abstract class AstarNeighbors
     protected abstract function call(vec2 test) returns smallvec_vec2_4
 
-public abstract class BfsFuture
+public abstract class AstarFuture
     protected abstract function call(astar_res res)
 
 public tuple option_int(bool have, int val)
@@ -63,33 +61,32 @@ class Vec2Wrap implements Hashable
     override function hash() returns string
         return "Vec2Wrap" + this.t.toString()
 
-function vec2.manhattan_to(vec2 rhs) returns real
+public function vec2.manhattan_to(vec2 rhs) returns real
     return (this.x - rhs.x).abs() + (this.y - rhs.y).abs()
 
-public function vec2.has_path_to(BfsPredicate success_goal_criteria, BfsNeighbors neighbor_fn, AstarHeuristicFn heuristic_fn, option_int maybe_limit, BfsPredicate is_pathable_fn, BfsFuture fut)
-    new Bfs(this, neighbor_fn, heuristic_fn, is_pathable_fn, maybe_limit, success_goal_criteria)
+public function vec2.has_path_to(AstarPredicate success_goal_criteria, AstarNeighbors neighbor_fn, AstarHeuristicFn heuristic_fn, option_int maybe_limit, AstarPredicate is_pathable_fn, AstarFuture fut)
+    new Astar(this, neighbor_fn, heuristic_fn, is_pathable_fn, maybe_limit, success_goal_criteria)
         ..evaluate_by_null_timers() res ->
             fut.call(res)
             destroy res.parent
 
 
 var duplicates_count = 0
-class Bfs
+class Astar
     vec2 start
     AstarHeuristicFn heuristic_fn
-    BfsPredicate evaluate
-    BfsPredicate success_criteria
-    BfsNeighbors neighbor_fn
+    AstarPredicate evaluate
+    AstarPredicate success_criteria
+    AstarNeighbors neighbor_fn
     option_int maybe_limit
 
     real start_ts
 
-    // LinkedList<Vec2Wrap> frontier
     RealHeapGuard<Vec2Wrap> frontier
 
     LinkedComparisonHashMap<bool> passed
 
-    construct(vec2 start, BfsNeighbors neighbor_fn, AstarHeuristicFn heuristic_fn, BfsPredicate evaluate, option_int maybe_limit, BfsPredicate success_criteria)
+    construct(vec2 start, AstarNeighbors neighbor_fn, AstarHeuristicFn heuristic_fn, AstarPredicate evaluate, option_int maybe_limit, AstarPredicate success_criteria)
         this.start = start
         this.evaluate = evaluate
         this.heuristic_fn = heuristic_fn
@@ -114,9 +111,9 @@ class Bfs
         i.close()
         destroy this.passed
 
-    private function _propagate(BfsFuture fut)
+    private function _propagate(AstarFuture fut)
         var cnt = 0
-        while (not this.frontier.is_empty()) and cnt < 10
+        while (not this.frontier.is_empty()) and cnt < 7  // 10 caused lag.  9 caused lag too.
             let itm = this.frontier.pop()
             cnt++
 
@@ -141,7 +138,7 @@ class Bfs
             fut.call(astar_res(this, false, getElapsedGameTime() - this.start_ts))
             destroy fut
 
-    function evaluate_by_null_timers(BfsFuture fut)
+    function evaluate_by_null_timers(AstarFuture fut)
         this.start_ts = getElapsedGameTime()
         new RealHeapGuard<Vec2Wrap>() guard ->
             this.frontier = guard
@@ -149,45 +146,45 @@ class Bfs
 
             _propagate(fut)
 
-init
-    FogEnable(false)
-    FogMaskEnable(false)
+// init
+//     FogEnable(false)
+//     FogMaskEnable(false)
 
-    doAfter(5.) ->
-        vec2(
-               0.,
-            -520.
-        // Is there a pathway from this node to the goal?
-        ).has_path_to(
-            // Define the goal as closeness to a particular other vec2.
-            (test) -> begin
-                let dist = test.manhattan_to(vec2(0., -1024.))
-                return dist < (16. + 16.)
-            end,
-            // Each iteration checks neighbors in 4 nearby quadrants.
-            (neighbor) -> begin
-                return smallvec_vec2_4(
-                    neighbor + vec2(  0.,  16.),
-                    neighbor + vec2(-16.,   0.),
-                    neighbor + vec2(  0., -16.),
-                    neighbor + vec2( 16.,   0.)
-                )
-            end,
-            // The heuristic function f is a fraction of the cost g, plus the
-            // inverse manhattan distance to the goal h.
-            (itm, cost, succ_criteria) -> begin
-                let dist = itm.manhattan_to(vec2(0., -1024.))
-                return 1. / dist
-            end,
-            // The check never times out.
-            option_int(false, 0),
-            // At each step, pathing is determined by walkable and floatable.
-            (test) -> begin
-                // Add an effect for debugging.
-                addEffect(Abilities.witchDoctorMissile, test).setScale(.5)
-                let suc = test.isTerrainWalkable() and not test.isTerrainPathable(PATHING_TYPE_FLOATABILITY)
-                return suc
-            end
-        ) res ->
-            // Finished searching.  Print the result.
-            print("test1 " + res.succ.toString() + " in " + res.duration.toString() + "s")
+//     doAfter(5.) ->
+//         vec2(
+//                0.,
+//             -520.
+//         // Is there a pathway from this node to the goal?
+//         ).has_path_to(
+//             // Define the goal as closeness to a particular other vec2.
+//             (test) -> begin
+//                 let dist = test.manhattan_to(vec2(0., -1024.))
+//                 return dist < (16. + 16.)
+//             end,
+//             // Each iteration checks neighbors in 4 nearby quadrants.
+//             (neighbor) -> begin
+//                 return smallvec_vec2_4(
+//                     neighbor + vec2(  0.,  16.),
+//                     neighbor + vec2(-16.,   0.),
+//                     neighbor + vec2(  0., -16.),
+//                     neighbor + vec2( 16.,   0.)
+//                 )
+//             end,
+//             // The heuristic function f is a fraction of the cost g, plus the
+//             // inverse manhattan distance to the goal h.
+//             (itm, cost, succ_criteria) -> begin
+//                 let dist = itm.manhattan_to(vec2(0., -1024.))
+//                 return 1. / dist
+//             end,
+//             // The check never times out.
+//             option_int(false, 0),
+//             // At each step, pathing is determined by walkable and floatable.
+//             (test) -> begin
+//                 // Add an effect for debugging.
+//                 addEffect(Abilities.witchDoctorMissile, test).setScale(.5)
+//                 let suc = test.isTerrainWalkable() and not test.isTerrainPathable(PATHING_TYPE_FLOATABILITY)
+//                 return suc
+//             end
+//         ) res ->
+//             // Finished searching.  Print the result.
+//             print("test1 " + res.succ.toString() + " in " + res.duration.toString() + "s")

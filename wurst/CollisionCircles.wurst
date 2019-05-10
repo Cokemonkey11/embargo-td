@@ -1,48 +1,48 @@
 package CollisionCircles
 
-import ClosureTimersFork
-import HashList
-import UnitIndexer
-import UI
+// import ClosureTimersFork
+// import HashList
+// import UnitIndexer
+// import UI
 
-import UnitsApi
-
-
-class UnitEffect
-    unit u
-    effect fx
-
-    // Takes ownership of `fx`.
-    construct(unit u, effect fx)
-        this.u = u
-        this.fx = fx
-
-    ondestroy
-        this.fx..setAlpha(0)..destr()
+// import UnitsApi
 
 
-let circles = new HashList<UnitEffect>()
-init
-    onUnitIndex() ->
-        let u = getIndexedUnit()
-        if u.hasAbility(ID_COLSN_CIRCLE)
-            let fx = addEffect(UI.selectioncircle, u.getPos())
-                ..setScale(1.4)
-                ..setAlpha(155)
-                ..setColor(255, 155, 255)
-                ..setHeight(-50.)
-            circles.add(new UnitEffect(u, fx))
+// class UnitEffect
+//     unit u
+//     effect fx
 
-    doPeriodicallyCounted(ANIMATION_PERIOD, 1000000) cb ->
-        if cb.isLast()
-            print("|cffff0000Error: collision indicators ran out of space!|r")
+//     // Takes ownership of `fx`.
+//     construct(unit u, effect fx)
+//         this.u = u
+//         this.fx = fx
 
-        let iters = circles.iterator()
-        while iters.hasNext()
-            let fx_pair = iters.next()
-            if fx_pair.u.getTypeId() != 0 and fx_pair.u.isAlive()
-                fx_pair.fx..setPos(fx_pair.u.getPos())..setHeight(-50.)
-            else
-                circles.remove(fx_pair)
-                destroy fx_pair
-        iters.close()
+//     ondestroy
+//         this.fx..setAlpha(0)..destr()
+
+
+// let circles = new HashList<UnitEffect>()
+// init
+//     onUnitIndex() ->
+//         let u = getIndexedUnit()
+//         if u.hasAbility(ID_COLSN_CIRCLE)
+//             let fx = addEffect(UI.selectioncircle, u.getPos())
+//                 ..setScale(1.4)
+//                 ..setAlpha(155)
+//                 ..setColor(255, 155, 255)
+//                 ..setHeight(-50.)
+//             circles.add(new UnitEffect(u, fx))
+
+//     doPeriodicallyCounted(ANIMATION_PERIOD, 1000000) cb ->
+//         if cb.isLast()
+//             print("|cffff0000Error: collision indicators ran out of space!|r")
+
+//         let iters = circles.iterator()
+//         while iters.hasNext()
+//             let fx_pair = iters.next()
+//             if fx_pair.u.getTypeId() != 0 and fx_pair.u.isAlive()
+//                 fx_pair.fx..setPos(fx_pair.u.getPos())..setHeight(-50.)
+//             else
+//                 circles.remove(fx_pair)
+//                 destroy fx_pair
+//         iters.close()
