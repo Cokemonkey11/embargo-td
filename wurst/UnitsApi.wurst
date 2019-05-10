@@ -3,6 +3,7 @@ package UnitsApi
 import Abilities
 import AbilityObjEditing
 import HashList
+import HashMap
 import Icons
 import ObjectIds
 import Units
@@ -10,6 +11,7 @@ import Units
 
 public constant ROUND_COUNT = 10  // Size of spawn swarms.
 
+public constant bounties_map = new HashMap<int, int>()
 
 // Boss ideas:
 //     - Flying Thundercat
@@ -26,7 +28,7 @@ public class UnitProps
     bool is_night_round
     string icon
 
-    function setup(int id, string model, string icon, string name, ArmorType armor_type, real scale_size, bool is_boss, bool is_night_round)
+    function setup(int id, string model, string icon, string name, int bounty, ArmorType armor_type, real scale_size, bool is_boss, bool is_night_round)
         this.id = id
         this.model = model
         this.icon = icon
@@ -36,34 +38,37 @@ public class UnitProps
         this.is_boss = is_boss
         this.is_night_round = is_night_round
 
-    construct(int id, string model, string icon, ArmorType armor_type, string name)
-        setup(id, model, icon, name, armor_type, .5, false, false)
+        bounties_map.put(id, bounty)
 
-    construct(int id, string model, string icon, ArmorType armor_type, string name, real scale_size, bool is_boss, bool is_night_round)
-        setup(id, model, icon, name, armor_type, scale_size, is_boss, is_night_round)
+    construct(int id, string model, string icon, ArmorType armor_type, string name, int bounty)
+        setup(id, model, icon, name, bounty, armor_type, .5, false, false)
+
+    construct(int id, string model, string icon, ArmorType armor_type, string name, int bounty, real scale_size, bool is_boss, bool is_night_round)
+        setup(id, model, icon, name, bounty, armor_type, scale_size, is_boss, is_night_round)
 
 
+// (props.is_boss ? ROUND_COUNT : 1) * (8 + i),  // 7 seemed too low.
 public constant SHIP_PROPS = new HashList<UnitProps>()..add(
-    new UnitProps('wv00', Units.orcishTransportShip,    Icons.bTNOrcishTransport,       ArmorType.Large,     "Dinghy", .4, false, false),
-    new UnitProps('wv01', Units.humanTransportShip1,    Icons.bTNHumanTransport,        ArmorType.Medium,    "Sailor"),
-    new UnitProps('wv02', Units.humanDestroyerShip1,    Icons.bTNHumanDestroyer,        ArmorType.Small,     "Interceptor", .5, false, true),
-    new UnitProps('wv03', Units.nightElfTransportShip1, Icons.bTNNightElfTransport,     ArmorType.Unarmored, "Crusader"),
-    new UnitProps('wv04', Units.orcishDestroyerShip1,   Icons.bTNOrcDestroyer,          ArmorType.Fortified, "Sea Punisher", .7, true, false),
-    new UnitProps('wv05', Units.undeadDestroyerShip1,   Icons.bTNUndeadDestroyer,       ArmorType.Medium,    "Destroyer"),
-    new UnitProps('wv06', Units.nightElfBattleship,     Icons.bTNNightElfBattleCruiser, ArmorType.Fortified, "Dominator", .6, false, false),
-    new UnitProps('wv07', Units.orcJuggernaught,        Icons.bTNJuggernaut,            ArmorType.Large,     "Juggernaught", .5, false, true),
-    new UnitProps('wv08', Units.undeadShipBattleShip,   Icons.bTNUndeadBattleShip,      ArmorType.Medium,    "Overlord"),
-    new UnitProps('wv09', Units.undeadTransportShip1,   Icons.bTNUndeadTransport,       ArmorType.Small,     "Ghost ship", .7, true, false),
-    new UnitProps('wv10', Units.nightElfFishingBoat,    Icons.bTNNightElfFishingBoat,   ArmorType.Unarmored, "Fishing boat"),
-    new UnitProps('wv11', Units.nightElfDestroyerShip1, Icons.bTNNightElfDestroyer,     ArmorType.Large,     "Battleship"),
-    new UnitProps('wv12', Units.humanBattleship,        Icons.bTNHumanBattleShip,       ArmorType.Medium,    "Dreadnought", .5, false, true),
-    new UnitProps('wv13', Units.warWagon,               Icons.bTNSeigeEngine,           ArmorType.Fortified, "Tank"),
-    new UnitProps('wv14', Units.bloodElfWagon,          Icons.bTNBloodElfSupplyWagon,   ArmorType.Unarmored, "Elven treasure wagon", .5, true, false),
-    new UnitProps('wv15', Units.obsidianStatue1,        Icons.bTNObsidianStatue,        ArmorType.Small,     "Floating artifact"),
-    new UnitProps('wv16', Units.undeadAirBarge1,        Icons.bTNUndeadAirBarge,        ArmorType.Medium,    "Yamato"),
-    new UnitProps('wv17', Units.wisp1,                  Icons.bTNWisp,                  ArmorType.Hero,      "Spirit", 1.,  false, true),
-    new UnitProps('wv18', Units.goblinZeppelin,         Icons.bTNGoblinZeppelin,        ArmorType.Small,     "Goblin warship", .75, false, false),
-    new UnitProps('wv19', Units.orcishTransportShip,    Icons.bTNOrcishTransport,       ArmorType.Large,     "Agamemnon", .85, true, false)
+    new UnitProps('wv00', Units.orcishTransportShip,    Icons.bTNOrcishTransport,       ArmorType.Large,     "Dinghy",                 8, .4, false, false),
+    new UnitProps('wv01', Units.humanTransportShip1,    Icons.bTNHumanTransport,        ArmorType.Medium,    "Sailor",                 9),
+    new UnitProps('wv02', Units.humanDestroyerShip1,    Icons.bTNHumanDestroyer,        ArmorType.Small,     "Interceptor",           10, .5, false, true),
+    new UnitProps('wv03', Units.nightElfTransportShip1, Icons.bTNNightElfTransport,     ArmorType.Unarmored, "Crusader",              11),
+    new UnitProps('wv04', Units.orcishDestroyerShip1,   Icons.bTNOrcDestroyer,          ArmorType.Fortified, "Sea Punisher",         120, .7, true, false),
+    new UnitProps('wv05', Units.undeadDestroyerShip1,   Icons.bTNUndeadDestroyer,       ArmorType.Medium,    "Destroyer",             13),
+    new UnitProps('wv06', Units.nightElfBattleship,     Icons.bTNNightElfBattleCruiser, ArmorType.Fortified, "Dominator",             14, .6, false, false),
+    new UnitProps('wv07', Units.orcJuggernaught,        Icons.bTNJuggernaut,            ArmorType.Large,     "Juggernaught",          15, .5, false, true),
+    new UnitProps('wv08', Units.undeadShipBattleShip,   Icons.bTNUndeadBattleShip,      ArmorType.Medium,    "Overlord",              16),
+    new UnitProps('wv09', Units.undeadTransportShip1,   Icons.bTNUndeadTransport,       ArmorType.Small,     "Ghost ship",           170, .7, true, false),
+    new UnitProps('wv10', Units.nightElfFishingBoat,    Icons.bTNNightElfFishingBoat,   ArmorType.Unarmored, "Fishing boat",          18),
+    new UnitProps('wv11', Units.nightElfDestroyerShip1, Icons.bTNNightElfDestroyer,     ArmorType.Large,     "Battleship",            19),
+    new UnitProps('wv12', Units.humanBattleship,        Icons.bTNHumanBattleShip,       ArmorType.Medium,    "Dreadnought",           20, .5, false, true),
+    new UnitProps('wv13', Units.warWagon,               Icons.bTNSeigeEngine,           ArmorType.Fortified, "Tank",                  21),
+    new UnitProps('wv14', Units.bloodElfWagon,          Icons.bTNBloodElfSupplyWagon,   ArmorType.Unarmored, "Elven treasure wagon", 220, .5, true, false),
+    new UnitProps('wv15', Units.obsidianStatue1,        Icons.bTNObsidianStatue,        ArmorType.Small,     "Floating artifact",     23),
+    new UnitProps('wv16', Units.undeadAirBarge1,        Icons.bTNUndeadAirBarge,        ArmorType.Medium,    "Yamato",                24),
+    new UnitProps('wv17', Units.wisp1,                  Icons.bTNWisp,                  ArmorType.Hero,      "Spirit",                25, 1.,  false, true),
+    new UnitProps('wv18', Units.goblinZeppelin,         Icons.bTNGoblinZeppelin,        ArmorType.Small,     "Goblin warship",        26, .75, false, false),
+    new UnitProps('wv19', Units.orcishTransportShip,    Icons.bTNOrcishTransport,       ArmorType.Large,     "Agamemnon",            270, .85, true, false)
 
     // The game must be more interesting before adding more waves...
 )
@@ -90,7 +95,7 @@ class CollisionCircle extends AbilityDefinitionItemRegenManalesser
         super(id)
 
 class BaseShip extends UnitDefinition
-    construct(int id, real scale, int ss, int hp, int bounty, string name, string model, ArmorType armor_type, int armor_amt, bool _is_boss, bool _is_night_round)
+    construct(int id, real scale, int ss, int hp, string name, string model, ArmorType armor_type, int armor_amt, bool _is_boss, bool _is_night_round)
         super(id, 'hbot')
         setScalingValue(scale)
         setSpeedBase(ss)
@@ -100,15 +105,15 @@ class BaseShip extends UnitDefinition
         setHitPointsMaximumBase(hp)
         setName(name)
         setFoodCost(1)
-        setGoldBountyAwardedBase(bounty - 1)
-        setGoldBountyAwardedNumberofDice(1)
-        setGoldBountyAwardedSidesperDie(1)
+        // setGoldBountyAwardedBase(bounty - 1)
+        // setGoldBountyAwardedNumberofDice(1)
+        // setGoldBountyAwardedSidesperDie(1)
 
         // 7 too small?  15 was pretty good, until they attacked while crossing
         // over.  With collision size 1, I saw a unit attack 3 towers.
         setCollisionSize(0.)
 
-        setAttacksEnabled(1)
+        setAttacksEnabled(0)
         setAttack1AttackType(AttackType.Normal)
         setAttack1Range(250)
         setAttack1TargetsAllowed("ground,structure,debris,air,item,ward")
@@ -152,7 +157,6 @@ function get_hp(int wave, bool is_boss, bool is_night_round) returns int
             props.scale_size,
             ((props.is_night_round ? 1.1 : 1.) * base_ss).toInt(),
             get_hp(i, props.is_boss, props.is_night_round),
-            (props.is_boss ? ROUND_COUNT : 1) * (8 + i),  // 7 seemed too low.
             props.name,
             props.model,
             props.armor_type,

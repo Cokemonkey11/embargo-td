@@ -1,9 +1,9 @@
 ---
-projectName: "embargo_td"
+projectName: embargo_td
 dependencies:
-- "https://github.com/wurstscript/wurstStdlib2"
+- https://github.com/wurstscript/wurstStdlib2
+- https://github.com/theQuazz/wurst-lodash
 buildMapData:
-  name: "Embargo TD 0.2.2"
-  fileName: "(8)embargo.td.0.2.2"
-  author: "Cokemonkey11"
-  playerCount: 8
+  name: Embargo TD 0.2.2
+  fileName: (8)embargo.td.0.2.2
+  author: Cokemonkey11

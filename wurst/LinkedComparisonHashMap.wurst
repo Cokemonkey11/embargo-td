@@ -53,6 +53,7 @@ public class LinkedComparisonHashMap<V>
 
             return put_result(PutStatus.Updated)
         else
+            destroy or_else
             return putNew(key, value)
 
     function putOrForgetOldAndDestroyNewKey(Hashable key, V value) returns put_result
