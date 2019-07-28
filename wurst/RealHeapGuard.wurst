@@ -131,6 +131,7 @@ function _pop_heap() returns maybe_real_and_obj_id
 function _release_heap()
     max_index = -1
 
+// Queue to access the static heap.
 let _heap_queue = new LinkedList<int>()
 var nonce = 0
 

@@ -5,6 +5,7 @@ import Astar
 import Board
 import ClosureForGroups
 import ClosureTimersFork
+import CreepAi
 import EventHelper
 import GameTimer
 import HashList
@@ -19,12 +20,14 @@ import UnitsApi
 import UnitIndexer
 import WareditorWalkable
 
-constant SETUP_TIME = 25.  // 15 seemed too low?  20 too low with new changes.
+// 15 seemed too low?  20 too low with astar changes.  25 too low by feedback.
+// Ditto 30 when Frotty tried.
+constant SETUP_TIME = 35.
 
 // 40 seemed too low?  45 too.  50 too.  55 too.  60 too.  Maybe fundamental
 // problem - need to check lives remaining?  Going back to 60.  Going back to
-// 55.  Going back to 50.
-constant PREROUND_DURATION = 20.
+// 55.  Going back to 50.  20 was too low.  25 too.
+constant PREROUND_DURATION = 30.
 
 constant STARTING_GOLD = 300
 constant WAYPOINT_NOMINAL_RADIUS = 75.
@@ -49,20 +52,6 @@ enum GameState
     Victory
 
 var state = GameState.Init
-
-
-class Waypoints
-    vec2 mid
-    vec2 fin
-    bool mid_visited
-
-    construct(vec2 mid, vec2 fin)
-        this.mid = mid
-        this.fin = fin
-        this.mid_visited = false
-
-
-let creep_track = new HashMap<unit, Waypoints>()
 
 enum CreepRoundErr
     NONE
@@ -96,7 +85,7 @@ function player.spawn_round(int whichRound, vec2 start, vec2 mid, vec2 fin, bool
     if is_night_round
         u.setVertexColor(155, 155, 155, 155)
 
-    creep_track.put(u, new Waypoints(mid, fin))
+    u.into_ai(mid, fin)
     u.issuePointOrder("smart", mid)
 
 
@@ -427,10 +416,9 @@ function checkPathPred(vec2 node, vec2 goal, AstarFuture fut)
 
         // At each step, pathing is determined by floatable and walkable.
         (test) -> begin
-            // Add an effect for debugging.
-            let fx = addEffect(Units.wisp1, test)..setScale(.5)
-            doAfter(1.) ->
-                fx.destr()
+            // Add an effect to indicate progress.  Also for debugging.
+            addEffect(Units.wisp1, test)..setScale(.5)..destr()
+
             let suc = not test.isTerrainPathable(PATHING_TYPE_FLOATABILITY) and
                 test.isWalkableU()
             return suc
@@ -479,7 +467,7 @@ function checkPathTeamMidpointRegion(vec2 node, vec2 goal, Team responsible)
     end)
 
 function checkAllPaths()
-    teams.forEach() team ->
+    destroy teams.copy()..shuffle()..forEach((team) -> begin
         // Check path for A, B, and AB spawns as Node, and some nearby deep
         // water as Goal.
         checkPathPlayer(team.a_waypoint, team.a_deeppoint, team.a)
@@ -487,12 +475,11 @@ function checkAllPaths()
         checkPathTeamMidpointRegion(team.mid_waypoint, team.mid_deeppoint, team)
         // TODO: Add for midpoint as well with two responsible players.
         // checkPath(team.mid_waypoint, team.a, team.b)
+    end)
+
 
 function doWave()
     state = GameState.AwaitingWave
-
-    // doAfter(PREROUND_DURATION - 10.) ->
-    //     checkAllPaths()
 
     let cb = doPeriodicallyCounted(PREROUND_DURATION, 1) cb ->
         if state != GameState.Lost and state != GameState.Victory
@@ -507,7 +494,7 @@ function doWave()
             teams.forEach() team ->
                 team.hold_units()
 
-                doAfter(3.) ->
+                doAfter(5.) ->  // 3 was too little for A* to complete.
                     team.do_round_spawn(round)
 
     cb.setupDialogCallback() cb2 ->
@@ -576,6 +563,18 @@ function unsurrogate(player p) returns maybe_player
         team_or_null.a_surrogate == p ? team_or_null.a : team_or_null.b
     )
 
+function surrogate(player p) returns maybe_player
+    let team_or_null = find(teams) team ->
+        return team.a == p or team.b == p
+
+    if team_or_null == null
+        return maybe_player(false, null)
+
+    return maybe_player(
+        true,
+        team_or_null.a == p ? team_or_null.a_surrogate : team_or_null.b_surrogate
+    )
+
 
 tuple team_and_unit(Team team, unit fx)
 init
@@ -641,16 +640,15 @@ init
                     otherTeam.b.setPlayerAlliance(team.a, ALLIANCE_PASSIVE,       true)
                     otherTeam.b.setPlayerAlliance(team.a, ALLIANCE_SHARED_VISION, true)
 
-    doAfter(480.) ->
-        print(
-            "Did you know?  This map was made with just 1500 lines of |cffffcc00WurstScript|r."
-        )
-
     // Player leave setup.
     playerLeaves() pl ->
         print(pl.getNameColored() + " has left the game!")
         forUnitsOfPlayer(pl) u ->
             u.remove()
+        let maybe_surrogate = surrogate(pl)
+        if maybe_surrogate.have
+            forUnitsOfPlayer(maybe_surrogate.p) u ->
+                u.remove()
 
         let team = get_team_from_player(pl)
         if not team.get_other_player(pl).isIngame()
@@ -780,17 +778,6 @@ init
                     ..issueImmediateOrder(ORDER_HOLD_POSITION),
                 GetOwningPlayer(GetSoldUnit())
             )
-
-
-    // Order attacking creeps to try moving again.
-    // addOnDamageFunc() ->
-    //     let attacker = GetEventDamageSource()
-    //     if getDamageType() == DamageType.ATTACK and creep_track.has(attacker)
-    //         let waypoints = creep_track.get(attacker)
-    //         attacker.removeAbility('Aatk')
-    //         attacker.issuePointOrder("smart", waypoints.mid_visited ? waypoints.fin : waypoints.mid)
-    //         nullTimer() ->
-    //             attacker.issuePointOrder("smart", waypoints.mid_visited ? waypoints.fin : waypoints.mid)
 
     registerPlayerUnitEvent(EVENT_PLAYER_UNIT_DEATH) ->
         let creep = GetDyingUnit()

@@ -1,0 +1,31 @@
+package CreepAi
+
+import ClosureTimersFork
+import HashMap
+
+constant grp = CreateGroup()
+
+class Waypoints
+    vec2 mid
+    vec2 fin
+    bool mid_visited
+
+    construct(vec2 mid, vec2 fin)
+        this.mid = mid
+        this.fin = fin
+        this.mid_visited = false
+
+public constant creep_track = new HashMap<unit, Waypoints>()
+
+public function unit.into_ai(vec2 mid, vec2 fin)
+    creep_track.put(this, new Waypoints(mid, fin))
+    grp.addUnit(this)
+
+init
+    doPeriodically(1.) _cb ->
+        for u in grp
+            if creep_track.has(u)
+                let wp = creep_track.get(u)
+                u.issuePointOrder("smart", wp.mid_visited ? wp.fin : wp.mid)
+            else
+                print("Error! Unit not in creep track " + u.getName())

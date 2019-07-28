@@ -1,0 +1,29 @@
+package Commands
+import ClosureEvents
+import ReflectionSummary
+import StringUtils
+
+init
+    EventListener.add(EVENT_PLAYER_CHAT_FILTER) ->
+        var str = GetEventPlayerChatString()
+        if str.startsWith("-")
+            parseCommand(str)
+
+function parseCommand(string str)
+    let p = GetTriggerPlayer()
+    var args = str.substring(1).split(" ")
+    var cstr = args.get(0)
+
+    switch cstr
+        case "rename"
+            if not args.isEmpty()
+                p.setName(args.get(1))
+        case "clear"
+            if localPlayer == p
+                ClearTextMessages()
+        case "wurst"
+            reflection_summary(1000)
+        default
+            skip
+
+    destroy args

@@ -32,6 +32,8 @@ public function smallvec_vec2_4.each(Smallvec_vec2_4_fn fn)
     fn.call(this.c)
     fn.call(this.d)
 
+    destroy fn
+
 public tuple astar_res(Astar parent, bool succ, real duration)
 
 public abstract class AstarPredicate
@@ -65,11 +67,26 @@ public function vec2.manhattan_to(vec2 rhs) returns real
     return (this.x - rhs.x).abs() + (this.y - rhs.y).abs()
 
 public function vec2.has_path_to(AstarPredicate success_goal_criteria, AstarNeighbors neighbor_fn, AstarHeuristicFn heuristic_fn, option_int maybe_limit, AstarPredicate is_pathable_fn, AstarFuture fut)
-    new Astar(this, neighbor_fn, heuristic_fn, is_pathable_fn, maybe_limit, success_goal_criteria)
-        ..evaluate_by_null_timers() res ->
-            fut.call(res)
-            destroy res.parent
+    new Astar(
+        this,
+        neighbor_fn,
+        heuristic_fn,
+        is_pathable_fn,
+        maybe_limit,
+        success_goal_criteria
+    )..evaluate_by_recursive_timers(ANIMATION_PERIOD) res ->
+        fut.call(res)
+        destroy res.parent
 
+function assert(bool assertion, string panic_text)
+    if not assertion
+        print("Failed assertion " + panic_text)
+
+var max_alloc_exp = 0
+function maybe_debug_print(int val)
+    if val.toReal() > (2.0.pow(max_alloc_exp.toReal()))
+        max_alloc_exp++
+        // print("allocated " + val.toString())
 
 var duplicates_count = 0
 class Astar
@@ -97,23 +114,34 @@ class Astar
         this.passed = new LinkedComparisonHashMap<bool>()
 
     ondestroy
+        // print("Destroy A* instance...")
+        var n = 0
         while not this.frontier.is_empty()
-            destroy this.frontier.pop()
+            n++
+            let popped = this.frontier.pop()
+            if popped == null
+                print("null")
+            destroy popped
+        // print("  Destroyed " + n.toString() + " from frontier.")
         destroy this.frontier
 
         destroy this.success_criteria
         destroy this.evaluate
 
         let i = this.passed.iterator()
+        var m = 0
         while i.hasNext()
             let v = i.next()
+            m++
             destroy v
         i.close()
+        // print("  Destroyed " + m.toString() + " from passed-set.")
         destroy this.passed
+        // print("Destroyed A* instance.")
 
-    private function _propagate(AstarFuture fut)
+    private function _propagate(real period, AstarFuture fut)
         var cnt = 0
-        while (not this.frontier.is_empty()) and cnt < 7  // 10 caused lag.  9 caused lag too.
+        while (not this.frontier.is_empty()) and cnt < 5  // 10 caused lag.  9 caused lag too.  7 too.
             let itm = this.frontier.pop()
             cnt++
 
@@ -124,27 +152,44 @@ class Astar
             if this.evaluate.call(itm.t)
                 this.neighbor_fn.call(itm.t).each() pair ->
                     let wrapped = new Vec2Wrap(pair, itm.cost + 1)
+                    // assert(wrapped != null, "new Vec2Wrap was null")
+                    // maybe_debug_print(wrapped castTo int)
+
                     if not this.passed.has(wrapped)
-                        this.frontier.push(this.heuristic_fn.call(itm.t, itm.cost, this.success_criteria), wrapped)
-                        this.passed.putOrForgetOldAndDestroyNewKey(wrapped, true)
+                        this.frontier.push(          // Push to frontier heap.
+                            this.heuristic_fn.call(  // Evaluate weight.
+                                itm.t,
+                                itm.cost,
+                                this.success_criteria
+                            ),
+                            wrapped
+                        )
+
+                        // Conditionally, push to the set of checked nodes.
+                        this.passed.putOrForgetOldAndDestroyNewKey(
+                            wrapped,
+                            true
+                        )
                     else
                         destroy wrapped
 
         if not this.frontier.is_empty()
-            // nullTimer() ->
-            doAfter(ANIMATION_PERIOD) ->
-                _propagate(fut)
+            doAfter(period) ->
+                _propagate(period, fut)
         else
             fut.call(astar_res(this, false, getElapsedGameTime() - this.start_ts))
             destroy fut
 
-    function evaluate_by_null_timers(AstarFuture fut)
+    function evaluate_by_recursive_timers(real period, AstarFuture fut)
         this.start_ts = getElapsedGameTime()
         new RealHeapGuard<Vec2Wrap>() guard ->
             this.frontier = guard
-            guard.push(this.heuristic_fn.call(this.start, 0, this.success_criteria), new Vec2Wrap(this.start, 0))
+            guard.push(
+                this.heuristic_fn.call(this.start, 0, this.success_criteria),
+                new Vec2Wrap(this.start, 0)
+            )
 
-            _propagate(fut)
+            _propagate(period, fut)
 
 // init
 //     FogEnable(false)

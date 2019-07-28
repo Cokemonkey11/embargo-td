@@ -1,0 +1,23 @@
+package ReflectionSummary
+
+import Reflection
+
+native maxTypeId() returns int
+native typeIdToTypeName(int _v) returns string
+native instanceCount(int _v) returns int
+native maxInstanceCount(int _v) returns int
+
+public function reflection_summary(int at_least)
+    var type_id_iter = 1
+    while type_id_iter < maxTypeId()
+
+        if maxInstanceCount(type_id_iter) > at_least
+            print(
+                typeIdToTypeName(type_id_iter) +
+                ": " +
+                instanceCount(type_id_iter).toString() +
+                "/" +
+                maxInstanceCount(type_id_iter).toString()
+            )
+
+        type_id_iter++

@@ -45,24 +45,39 @@ public class LinkedComparisonHashMap<V>
         size++
 
 
-    function putOrElse(Hashable key, V value, PutWithDuplicateFn<V> or_else) returns put_result
+    function putOrElse(
+        Hashable key,
+        V value,
+        PutWithDuplicateFn<V> or_else
+    ) returns put_result
         if this.has(key)
+            // For purposes of A*, this branch is never hit (`has` is checked
+            // before calling `putOrElse`)
+
             let entry = keysEntries.get(key.hash())
             entry.value = or_else.call(key, entry.value, value)
             destroy or_else
 
             return put_result(PutStatus.Updated)
         else
+            // Branch hit every time for A*.
             destroy or_else
             return putNew(key, value)
 
-    function putOrForgetOldAndDestroyNewKey(Hashable key, V value) returns put_result
+
+    function putOrForgetOldAndDestroyNewKey(
+        Hashable key,
+        V value
+    ) returns put_result
         return putOrElse(key, value) (new_key, existing, nu) ->
             destroy new_key
+            // destroy existing // ?
             return nu
+
 
     /** Saves the given value under the given key. */
     private function putNew(Hashable key, V value) returns put_result
+        // Key, Value is inserted.  When is Key deleted?
         let entry = new LHMEntry<V>(this, key, value)
         addEntry(entry)
         keysEntries.put(key.hash(), entry)
@@ -163,6 +178,8 @@ public class LHMEntry<V>
 
         this.prev.next = this.next
         this.next.prev = this.prev
+
+        // destroy key - looks like double-free with this line
 
 
 public class LHMIterator<V>
